@@ -36,7 +36,7 @@ const PATH=new THREE.CatmullRomCurve3([
  [0,0,8],[0,0,1],[-4.5,0,-8],[-2,0,-18],[4,0,-26],[3,0,-36],[-3.5,0,-45],[-1,0,-55],[0,0,-62]
 ].map(a=>new THREE.Vector3(...a)));
 const LEN=PATH.getLength();
-const R=3.5;
+const R=4.2;   // más ancho: ahora entran objetos de 2.5 contra 1.6 de ratoncita
 
 const tunnel=new THREE.Mesh(
  new THREE.TubeGeometry(PATH,MOBILE?110:190,R,MOBILE?10:14,false),
@@ -133,7 +133,7 @@ for(let i=0;i<=SEG;i++){
  const u=i/SEG,p=PATH.getPointAt(u),tan=PATH.getTangentAt(u);
  SAMP.push({u,p,side:new THREE.Vector3().crossVectors(tan,UP).normalize()});
 }
-const LAT_MAX=R*.62;
+const LAT_MAX=R*.44;   // el pasillo caminable, más estrecho que el túnel: no entra en los objetos
 function toPath(point){
  let best=SAMP[0],bd=Infinity;
  for(const s of SAMP){ const d=s.p.distanceToSquared(point); if(d<bd){bd=d;best=s} }
@@ -170,49 +170,144 @@ function pingAt(p){
  gsap.to(ring.scale,{x:1.6,y:1.6,duration:.75,ease:"power2.out"});
 }
 
-/* ---------- los recuerdos ---------- */
+/* ---------- farolitos colgados de la bóveda ---------- */
+const lanterns=[];
+function makeLantern(u,lat,power=2.1){
+ const g=new THREE.Group();
+ placeAt(u,lat,g.position);
+ const top=Math.sqrt(Math.max(R*R-lat*lat,1))-.06;   // el punto de la bóveda justo encima
+ g.position.y=top;
+ const drop=top-2.5;
+ const dark=new THREE.MeshStandardMaterial({color:0x33241a,roughness:.7,metalness:.25});
+ const cord=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,drop,5),new THREE.MeshStandardMaterial({color:0x2b1d15,roughness:1}));
+ cord.position.y=-drop/2; g.add(cord);
+ const cap=new THREE.Mesh(new THREE.ConeGeometry(.21,.2,8),dark); cap.position.y=-drop-.04; g.add(cap);
+ const glass=new THREE.Mesh(new THREE.SphereGeometry(.2,12,10),new THREE.MeshBasicMaterial({color:0xffd79a}));
+ glass.position.y=-drop-.28; g.add(glass);
+ const foot=new THREE.Mesh(new THREE.CylinderGeometry(.09,.14,.12,8),dark); foot.position.y=-drop-.5; g.add(foot);
+ const light=new THREE.PointLight(0xffb974,power,13,1.5);
+ light.position.y=-drop-.28; g.add(light);
+ g.userData.p=Math.random()*7;                       // cada uno se mece a su ritmo
+ scene.add(g); lanterns.push(g);
+}
+
+/* ---------- los objetos: todo primitivas, ~2.5 de alto contra 1.6 de ratoncita ---------- */
+function makeSpool(){                                 // carrete de hilo
+ const g=new THREE.Group();
+ const wood=new THREE.MeshStandardMaterial({color:0xbb8c52,roughness:.85,flatShading:true});
+ const yarn=new THREE.MeshStandardMaterial({color:0xd2718a,roughness:.95});
+ for(const y of [.09,2.36]){
+   const f=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,.18,22),wood); f.position.y=y; g.add(f);
+ }
+ const core=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,2.3,14),wood); core.position.y=1.22; g.add(core);
+ const wound=new THREE.Mesh(new THREE.CylinderGeometry(1,1,1.9,20),yarn); wound.position.y=1.22; g.add(wound);
+ for(const y of [.62,1.22,1.82]){                     // vueltas sueltas, para que se vea hilo y no un cilindro
+   const w=new THREE.Mesh(new THREE.TorusGeometry(1.01,.055,6,20),yarn);
+   w.rotation.x=Math.PI/2; w.position.y=y; g.add(w);
+ }
+ // la hebra que se escapa hasta el suelo
+ const strand=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+   new THREE.Vector3(.98,1.5,.1),new THREE.Vector3(1.5,1,.5),
+   new THREE.Vector3(1.4,.12,1.2),new THREE.Vector3(.6,.05,1.9)
+ ]),20,.05,5),yarn);
+ g.add(strand);
+ return g;
+}
+function makeStrawberries(){                          // fresas
+ const g=new THREE.Group();
+ const prof=[[0,0],[.28,.16],[.5,.42],[.62,.75],[.56,1.02],[.3,1.14],[.06,1.18]].map(a=>new THREE.Vector2(...a));
+ const berryGeo=new THREE.LatheGeometry(prof,16);
+ const red=new THREE.MeshStandardMaterial({color:0xd8342f,roughness:.45});
+ const leaf=new THREE.MeshStandardMaterial({color:0x4c8b3a,roughness:.8,side:THREE.DoubleSide});
+ const seedGeo=new THREE.SphereGeometry(.032,6,5);
+ const seeds=new THREE.InstancedMesh(seedGeo,new THREE.MeshStandardMaterial({color:0xf7e08a,roughness:.6}),54);
+ let sn=0;
+ // se reparten a lo largo del túnel, no hacia la pared: así el grupo no se ancha
+ [[0,0,2.1],[-1.15,.1,1.5],[1.2,-.15,1.25]].forEach(([x,z,s])=>{
+   const b=new THREE.Mesh(berryGeo,red);
+   b.position.set(x,0,z); b.scale.setScalar(s); b.rotation.y=Math.random()*3; g.add(b);
+   for(let i=0;i<18&&sn<seeds.count;i++,sn++){        // pepitas pegadas al perfil de la fresa
+     const f=.12+Math.random()*.75,k=f*(prof.length-1),j=Math.floor(k),p0=prof[j],p1=prof[Math.min(j+1,prof.length-1)],l=k-j;
+     const r=(p0.x+(p1.x-p0.x)*l)*.97,y=(p0.y+(p1.y-p0.y)*l),a=Math.random()*Math.PI*2;
+     dummy.position.set(x+Math.cos(a)*r*s,y*s,z+Math.sin(a)*r*s);
+     dummy.rotation.set(0,0,0); dummy.scale.setScalar(s);
+     dummy.updateMatrix(); seeds.setMatrixAt(sn,dummy.matrix);
+   }
+   for(let i=0;i<5;i++){                              // corona: lo que hace que se lea "fresa"
+     const l=new THREE.Mesh(new THREE.ConeGeometry(.16,.42,4),leaf);
+     l.position.set(x,1.1*s,z); l.rotation.set(-1.15,i*1.257,0); l.scale.setScalar(s); g.add(l);
+   }
+   const stem=new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,.3,6),leaf);
+   stem.position.set(x,1.26*s,z); stem.scale.setScalar(s); g.add(stem);
+ });
+ seeds.count=sn; g.add(seeds);
+ return g;
+}
+function makeCheese(){                                // trozo de queso
+ const s=new THREE.Shape();
+ s.moveTo(-1.2,0); s.lineTo(1.2,0); s.lineTo(-1.2,2.05); s.closePath();
+ // los agujeros pasantes del extruido son literalmente los agujeros del queso
+ for(const [x,y,r] of [[-.4,.4,.28],[.3,.3,.2],[-.68,1,.2],[-.15,.82,.14],[-.82,1.5,.13]])
+   s.holes.push(new THREE.Path().absarc(x,y,r,0,Math.PI*2,true));
+ const geo=new THREE.ExtrudeGeometry(s,{depth:1,bevelEnabled:true,bevelSize:.05,bevelThickness:.05,bevelSegments:1});
+ geo.translate(0,0,-.5);
+ const g=new THREE.Group();
+ g.add(new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0xf2c04a,roughness:.7})));
+ return g;
+}
+function makeApple(){                                 // manzana
+ const g=new THREE.Group();
+ const prof=[[0,.1],[.55,0],[1.05,.3],[1.25,.95],[1.05,1.62],[.5,1.9],[.15,1.74],[0,1.78]].map(a=>new THREE.Vector2(...a));
+ g.add(new THREE.Mesh(new THREE.LatheGeometry(prof,20),new THREE.MeshStandardMaterial({color:0xc5332e,roughness:.35})));
+ const stem=new THREE.Mesh(new THREE.CylinderGeometry(.05,.07,.52,6),new THREE.MeshStandardMaterial({color:0x5a3a22,roughness:.9}));
+ stem.position.set(.05,2,0); stem.rotation.z=-.18; g.add(stem);
+ const leaf=new THREE.Mesh(new THREE.SphereGeometry(.3,10,8),new THREE.MeshStandardMaterial({color:0x4c8b3a,roughness:.8}));
+ leaf.scale.set(1,.14,.55); leaf.position.set(.42,2.12,.05); leaf.rotation.z=.35; g.add(leaf);
+ return g;
+}
+
+/* ---------- los recuerdos: objeto detrás, polaroid apoyada delante ---------- */
 const MEMORIES=[
- {u:.17,side:-1,photo:"assets/photos/foto1.jpeg",
+ {u:.17,side:-1,lat:2.55,shape:makeSpool,photo:"assets/photos/foto1.jpeg",
   text:"Lo primero que encontró fue esto. Y pensó que si algo merecía guardarse, era justo ese día."},
- {u:.38,side:1,photo:"assets/photos/foto2.jpeg",
+ {u:.38,side:1,lat:2.5,shape:makeStrawberries,photo:"assets/photos/foto2.jpeg",
   text:"Hay risas que uno se lleva puestas mucho después. Esta es una de esas."},
- {u:.62,side:-1,photo:"assets/photos/foto3.jpeg",
+ {u:.62,side:-1,lat:2.5,shape:makeCheese,photo:"assets/photos/foto3.jpeg",
   text:"Incluso cuando estuvimos lejos, esto seguía aquí abajo, esperándote intacto."},
- {u:.83,side:1,photo:"assets/photos/foto4.jpeg",
+ {u:.83,side:1,lat:2.35,shape:makeApple,photo:"assets/photos/foto4.jpeg",
   text:"Y todavía nos queda muchísimo por meter en esta madriguera."}
 ];
+const POL_Y=.72;                                      // la polaroid se apoya en el suelo, no sobre el objeto
 const polaroids=[];
-function makeMemory(m){
+MEMORIES.forEach(m=>{
  const g=new THREE.Group();
- placeAt(m.u,m.side*2.75,g.position);   // fuera del pasillo caminable: no puede atravesarlas
- g.lookAt(placeAt(m.u,0,tmp2.clone()));
-
- const crate=new THREE.Mesh(new THREE.BoxGeometry(1.2,.78,.9),new THREE.MeshStandardMaterial({color:0x7d5536,roughness:.9,flatShading:true}));
- crate.position.y=.39; g.add(crate);
+ placeAt(m.u,m.side*m.lat,g.position);                // fuera del pasillo caminable
+ g.lookAt(placeAt(m.u,0,tmp2.clone()));               // +Z mira al centro del túnel
+ const obj=m.shape();
+ obj.rotation.y=(Math.random()-.5)*.5; g.add(obj);
 
  const pol=new THREE.Group();
- pol.position.set(0,1.33,.1); pol.rotation.set(-.16,(Math.random()-.5)*.4,(Math.random()-.5)*.14);
+ pol.position.set((Math.random()-.5)*.3,POL_Y,1.15);  // delante del objeto
+ pol.rotation.set(-.13,(Math.random()-.5)*.35,(Math.random()-.5)*.1);
  g.add(pol);
  const frameMat=new THREE.MeshStandardMaterial({color:0xfbf6ea,roughness:.75,emissive:0xffbb66,emissiveIntensity:0});
- pol.add(new THREE.Mesh(new THREE.BoxGeometry(.94,1.1,.035),frameMat));
+ pol.add(new THREE.Mesh(new THREE.BoxGeometry(1.15,1.35,.04),frameMat));
  // la foto va arriba: el borde gordo de abajo es lo que hace que se lea "polaroid"
  const photoMat=new THREE.MeshStandardMaterial({color:0x2a2320,roughness:.6});
  tex.load(m.photo,tx=>{
    tx.colorSpace=THREE.SRGBColorSpace;
-   const a=tx.image.width/tx.image.height;      // recorte tipo cover en un cuadrado
+   const a=tx.image.width/tx.image.height;            // recorte tipo cover en un cuadrado
    if(a>1){ tx.repeat.set(1/a,1); tx.offset.x=(1-1/a)/2 } else { tx.repeat.set(1,a); tx.offset.y=(1-a)/2 }
    photoMat.map=tx; photoMat.color.set(0xffffff); photoMat.needsUpdate=true;
- },null,()=>{});                                 // si la foto aún no existe, queda el papel vacío
- const photo=new THREE.Mesh(new THREE.PlaneGeometry(.78,.78),photoMat);
- photo.position.set(0,.12,.02); pol.add(photo);
-
- const light=new THREE.PointLight(0xffb974,1.5,9,1.7);
- light.position.set(0,1.5,.5); g.add(light);
+ },null,()=>{});                                       // si la foto aún no existe, queda el papel vacío
+ const photo=new THREE.Mesh(new THREE.PlaneGeometry(.96,.96),photoMat);
+ photo.position.set(0,.14,.025); pol.add(photo);
 
  scene.add(g);
+ makeLantern(m.u,m.side*1.15,2.4);                     // cada recuerdo tiene su farol encima
  polaroids.push({...m,g,pol,frameMat,seen:false});
-}
-MEMORIES.forEach(makeMemory);
+});
+for(const u of (MOBILE?[.5]:[.06,.28,.5,.73,.95])) makeLantern(u,(Math.random()-.5)*1.4,1.7);
 
 /* ---------- UI ---------- */
 const intro=$("#intro"),memoryScreen=$("#memory"),hint=$("#hint");
@@ -227,7 +322,7 @@ function openMemory(i){
  if(m.seen) return;
  m.seen=true; paused=true; focus=m; say("");
  gsap.killTweensOf(walker); walking=false;
- gsap.to(m.pol.position,{y:1.8,duration:.9,ease:"back.out(1.5)"});
+ gsap.to(m.pol.position,{y:1.65,duration:.9,ease:"back.out(1.5)"});
  gsap.to(m.frameMat,{emissiveIntensity:.55,duration:.6});
  $("#memoryPhoto").src=m.photo;
  $("#memoryText").textContent=m.text;
@@ -237,7 +332,7 @@ function openMemory(i){
 }
 $(".memory-next").addEventListener("click",()=>{
  hide(memoryScreen);
- gsap.to(focus.pol.position,{y:1.33,duration:.7,ease:"power2.inOut"});
+ gsap.to(focus.pol.position,{y:POL_Y,duration:.7,ease:"power2.inOut"});
  gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});
  focus=null; paused=false;
  say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
@@ -295,6 +390,7 @@ function animate(){
  rig.g.position.y=Math.abs(Math.sin(walkT))*.05*w;
  rig.tailG.rotation.y=Math.sin(t*3+walkT*.5)*.3;   // la cola se menea siempre, quieta o andando
  lamp.position.set(mouse.position.x,2.3,mouse.position.z);
+ for(const l of lanterns) l.rotation.z=Math.sin(t*.62+l.userData.p)*.045;
 
  // ¿hay un recuerdo al alcance?
  let n=-1;
@@ -308,14 +404,14 @@ function animate(){
    else say("Toca el suelo para caminar");
  }
  if(near>=0&&polaroids[near]&&!polaroids[near].seen)
-   polaroids[near].pol.position.y=1.33+Math.sin(t*2.4)*.035;   // late, para que se note que es tocable
+   polaroids[near].pol.position.y=POL_Y+Math.sin(t*2.4)*.035;   // late, para que se note que es tocable
 
  // cámara: detrás de ella sobre la propia curva, así nunca entra en una pared
  if(focus){
-   focus.g.getWorldPosition(camLook); camLook.y+=1.3;
+   focus.g.getWorldPosition(camLook); camLook.y+=1.15;
    camPos.copy(camLook).addScaledVector(tmp.subVectors(mouse.position,camLook).setY(0).normalize(),2.4).setY(1.9);
  }else{
-   placeAt(walker.u-2.6/LEN,walker.lat*.5,camPos); camPos.y=2.35;
+   placeAt(walker.u-2.6/LEN,walker.lat*.5,camPos); camPos.y=2.5;
    camLook.copy(mouse.position).setY(1.1);
  }
  camera.position.lerp(camPos,1-Math.exp(-dt*(focus?3.2:2.4)));
