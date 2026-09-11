@@ -14,6 +14,7 @@ renderer.toneMappingExposure=1.18;
 
 const SPEED=matchMedia("(prefers-reduced-motion: reduce)").matches?4:1;
 gsap.globalTimeline.timeScale(SPEED);
+const wait=ms=>new Promise(r=>setTimeout(r,ms/SPEED));
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x120b08);
@@ -346,6 +347,11 @@ for(const u of (MOBILE?[.5]:[.08,.5,.92])) makeLantern(u,(Math.random()-.5)*1.4,
    El arco tapa la juntura donde muere el tubo. */
 const END_U=.985;
 const endPoint=PATH.getPointAt(1),endFwd=PATH.getTangentAt(1);
+const herEnd=placeAt(END_U,-.85,new THREE.Vector3());
+const hisEnd=placeAt(END_U,.85,new THREE.Vector3());
+const midEnd=herEnd.clone().lerp(hisEnd,.5); midEnd.y=2;
+const FINAL_CAM=midEnd.clone().addScaledVector(endFwd,5.8); FINAL_CAM.y=2.3;
+const yawTo=(a,b)=>Math.atan2(b.x-a.x,b.z-a.z);
 const chamber=new THREE.Mesh(
  new THREE.SphereGeometry(9.5,32,20),
  new THREE.MeshStandardMaterial({color:0x745034,roughness:1,side:THREE.BackSide,flatShading:true})
@@ -368,12 +374,20 @@ const fBuds=new THREE.InstancedMesh(flBud,new THREE.MeshStandardMaterial({roughn
 flowers.add(fStems,fBuds); scene.add(flowers);
 const flData=[];
 const budTints=[0xffd54a,0xffc21f,0xf6b93b,0xffe27a];
+// el pasillo entre la camara final y los dos se deja despejado, o las flores tapan el final
+const shotA=FINAL_CAM.clone().setY(0),shotAB=midEnd.clone().setY(0).sub(shotA),shotL=shotAB.lengthSq();
+const inShot=(x,z)=>{
+ const p=new THREE.Vector3(x,0,z).sub(shotA);
+ const k=THREE.MathUtils.clamp(p.dot(shotAB)/shotL,0,1);
+ return p.distanceTo(tmp.copy(shotAB).multiplyScalar(k))<2.7;
+};
 for(let i=0;i<FL;i++){
- const a=Math.random()*Math.PI*2,rad=3.4+Math.random()*5.2;
- flData.push({
-   x:chamber.position.x+Math.cos(a)*rad, z:chamber.position.z+Math.sin(a)*rad,
-   s:.45+Math.random()*.5, r:Math.random()*Math.PI, p:Math.random()*7
- });
+ let x,z,tries=0;
+ do{
+   const a=Math.random()*Math.PI*2,rad=2.2+Math.random()*7;
+   x=chamber.position.x+Math.cos(a)*rad; z=chamber.position.z+Math.sin(a)*rad;
+ }while(inShot(x,z)&&++tries<14);
+ flData.push({x,z,s:.45+Math.random()*.5,r:Math.random()*Math.PI,p:Math.random()*7});
  fBuds.setColorAt(i,new THREE.Color(budTints[i%budTints.length]));
 }
 fBuds.instanceColor.needsUpdate=true;
@@ -446,12 +460,8 @@ motes.frustumCulled=false; motes.visible=false; scene.add(motes);
 const moteData=[...Array(14)].map(()=>({a:Math.random()*6.28,r:.5+Math.random()*1.3,p:Math.random()*4,s:.05+Math.random()*.05}));
 
 /* ---------- puestas en escena del final ---------- */
-const herEnd=placeAt(END_U,-.85,new THREE.Vector3());
-const hisEnd=placeAt(END_U,.85,new THREE.Vector3());
-const midEnd=herEnd.clone().lerp(hisEnd,.5); midEnd.y=2;
 heartG.position.copy(midEnd);
 motes.position.copy(midEnd);
-const yawTo=(a,b)=>Math.atan2(b.x-a.x,b.z-a.z);
 
 /* ---------- UI ---------- */
 const intro=$("#intro"),memoryScreen=$("#memory"),hint=$("#hint");
@@ -491,7 +501,7 @@ async function finale(){
  walker.walking=true;
  await tween(walker,{u:END_U,lat:-.85,duration:3,ease:"power1.inOut"});
  walker.walking=false;
- finalCam=midEnd.clone().addScaledVector(endFwd,5.8); finalCam.y=2.3;
+ finalCam=FINAL_CAM;
  await wait(1600);
 
  // 2. él llega por detrás, con el ramo
