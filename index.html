@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111016">
+<title>Para ti, mi Cris 🌷</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="loading"><div class="loader-flower">🌷</div><p>Preparando algo para ti...</p></div>
+
+<canvas id="scene"></canvas>
+<div class="vignette"></div>
+<div class="noise"></div>
+
+<section id="ui">
+  <div class="topbar"><span>21 · 09</span><span>para ti ♥</span></div>
+
+  <div id="intro" class="screen active">
+    <div class="intro-copy">
+      <p class="kicker">Una pequeña historia</p>
+      <h1>Hay algo que<br><i>quiero contarte.</i></h1>
+      <p>Camina conmigo un ratito.</p>
+      <button id="begin">Comenzar <b>→</b></button>
+    </div>
+  </div>
+
+  <div id="letter" class="letter-screen">
+    <div class="letter-card">
+      <span class="letter-number">01</span>
+      <div class="envelope">✉</div>
+      <p class="letter-text" id="letterText"></p>
+      <button class="next-letter">Seguir caminando <span>→</span></button>
+    </div>
+  </div>
+
+  <div id="photoMoment" class="photo-moment">
+    <div class="memory-card">
+      <div class="memory-photo"><img id="photo1" src="assets/photos/foto1.jpg" alt="Nuestro recuerdo 1"></div>
+      <p>Un recuerdo que guardo con mucho cariño.</p>
+      <button class="memory-next">Continuar →</button>
+    </div>
+  </div>
+
+  <div id="final" class="final-screen">
+    <div class="final-content">
+      <p class="kicker">Para la persona que hace mis días más bonitos</p>
+      <h2>Entre todas las flores,<br><i>te elegiría a ti.</i></h2>
+      <div class="final-photo"><img id="herPhoto" src="assets/photos/ella.jpg" alt="Ella"></div>
+      <div class="final-copy">
+        <p>Porque quería regalarte flores amarillas, pero sentí que unas flores no eran suficientes para decirte lo especial que eres para mí.</p>
+        <p>Así que hice este pequeño lugar para ti. Espero que cada vez que lo visites recuerdes que hay alguien que piensa en ti con muchísimo cariño.</p>
+        <div class="signature">Con amor, <i>José</i></div>
+      </div>
+      <button id="replay">Volver a vivir la historia ↻</button>
+    </div>
+  </div>
+
+  <div id="progress" class="progress" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <button id="sound" class="sound" type="button" aria-label="Activar o silenciar la música"><span></span> música <b>on</b></button>
+  <p id="hint" aria-live="polite">Toca para continuar</p>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.179.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.179.1/examples/jsm/"}}
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
