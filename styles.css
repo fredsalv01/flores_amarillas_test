@@ -104,8 +104,13 @@ body {
   opacity: 0;
   visibility: hidden;
   transition:
-    opacity 1s ease,
-    visibility 1s;
+    opacity 0.6s ease,
+    visibility 0.6s;
+}
+.letter-screen.show,
+.photo-moment.show,
+#intro.active {
+  cursor: pointer; /* toda la pantalla avanza, no solo el botón */
 }
 .active,
 .show {
@@ -185,7 +190,7 @@ button b {
   position: relative;
   box-shadow: 0 30px 100px #0008;
   transform: rotate(-1.5deg);
-  font-family: "Cormorant Garamond", serif;
+  font-family: "EB Garamond", "Cormorant Garamond", serif;
 }
 .letter-card:before {
   content: "";
@@ -207,10 +212,13 @@ button b {
   margin-bottom: 35px;
 }
 .letter-text {
-  font-size: 31px;
-  line-height: 1.15;
-  margin: 0 0 38px;
-  min-height: 135px;
+  font-size: 26px;
+  line-height: 1.48;
+  letter-spacing: 0.004em;
+  color: #3a2b1d;
+  text-wrap: pretty;
+  margin: 0 0 34px;
+  min-height: 150px;
 }
 .next-letter {
   font-family: "DM Sans";
@@ -222,8 +230,8 @@ button b {
   z-index: 2;
 }
 .photo-moment {
-  background: rgba(10, 9, 13, 0.72);
-  backdrop-filter: blur(5px);
+  background: rgba(10, 9, 13, 0.78);
+  backdrop-filter: blur(3px); /* se reblurea cada frame sobre el canvas: barato o nada */
 }
 .memory-card {
   width: min(380px, 82%);
@@ -244,7 +252,7 @@ button b {
   display: block;
 }
 .memory-card p {
-  font: 500 24px "Cormorant Garamond";
+  font: 500 24px/1.35 "EB Garamond", serif;
   margin: 0 0 18px;
 }
 .memory-next {
@@ -289,15 +297,17 @@ button b {
 .final-copy {
   max-width: 610px;
   margin: auto;
-  color: #ddd2c1;
-  font-size: 14px;
-  line-height: 1.9;
+  color: #e3d8c7;
+  font-family: "EB Garamond", serif;
+  font-size: 17px;
+  line-height: 1.8;
+  text-wrap: pretty;
 }
 .final-copy p {
   margin: 0 0 20px;
 }
 .signature {
-  font: 25px "Cormorant Garamond";
+  font: italic 26px "Cormorant Garamond", serif;
   margin-top: 30px;
 }
 .signature i {
@@ -400,6 +410,7 @@ button b {
 .letter-card,
 .memory-card,
 .final-content {
+  will-change: transform, opacity;
   transform: translateY(22px) rotate(-1.5deg);
   transition:
     transform 1.1s cubic-bezier(0.16, 1, 0.3, 1),
@@ -472,9 +483,10 @@ body.dawn .progress i {
     padding: 40px 28px 28px;
   }
   .letter-text {
-    font-size: clamp(21px, 6.2vw, 28px);
+    font-size: clamp(19px, 5.2vw, 24px);
+    line-height: 1.45;
     min-height: 0;
-    margin-bottom: 28px;
+    margin-bottom: 26px;
   }
   .envelope {
     font-size: 24px;
@@ -484,8 +496,8 @@ body.dawn .progress i {
     padding-top: calc(64px + env(safe-area-inset-top));
   }
   .final-copy {
-    font-size: 13px;
-    line-height: 1.75;
+    font-size: 16px;
+    line-height: 1.72;
   }
   .final-content h2 {
     margin-bottom: 28px;
@@ -527,7 +539,8 @@ body.dawn .progress i {
     padding: 26px 34px 24px;
   }
   .letter-text {
-    font-size: clamp(19px, 3.4vw, 26px);
+    font-size: clamp(18px, 3.1vw, 23px);
+    line-height: 1.4;
     min-height: 0;
     margin-bottom: 20px;
   }

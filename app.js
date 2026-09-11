@@ -1,11 +1,12 @@
 import * as THREE from "three";
+import {mergeGeometries} from "three/addons/utils/BufferGeometryUtils.js";
 
 // ponytail: one flag drives every mobile tradeoff (counts, AA, shadow res, pixel ratio)
 const MOBILE=matchMedia("(pointer:coarse)").matches&&Math.min(innerWidth,innerHeight)<900;
 
 const canvas=document.querySelector("#scene");
-const renderer=new THREE.WebGLRenderer({canvas,antialias:!MOBILE});
-renderer.setPixelRatio(Math.min(devicePixelRatio,MOBILE?1.5:2));
+const renderer=new THREE.WebGLRenderer({canvas,antialias:!MOBILE,powerPreference:"high-performance"});
+renderer.setPixelRatio(Math.min(devicePixelRatio,MOBILE?1.5:1.75));
 renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=MOBILE?THREE.PCFShadowMap:THREE.PCFSoftShadowMap;
@@ -16,7 +17,16 @@ renderer.toneMappingExposure=1.12;
 const SPEED=matchMedia("(prefers-reduced-motion: reduce)").matches?4:1;
 gsap.globalTimeline.timeScale(SPEED);
 const wait=ms=>new Promise(r=>setTimeout(r,ms/SPEED));
-const clickOnce=sel=>new Promise(r=>document.querySelector(sel).addEventListener("click",r,{once:true}));
+// avanzar tocando donde sea de la pantalla activa, o con Enter/espacio — no solo el botón
+const clickOnce=sel=>new Promise(r=>{
+ const btn=document.querySelector(sel);
+ const zone=btn.closest(".screen,.letter-screen,.photo-moment")||btn;
+ const done=()=>{zone.removeEventListener("pointerdown",tap);removeEventListener("keydown",key);r()};
+ const tap=()=>done();
+ const key=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();done()}};
+ zone.addEventListener("pointerdown",tap);   // pointerdown, no click: ~100ms menos en táctil
+ addEventListener("keydown",key);
+});
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x0d0b12);
@@ -52,35 +62,91 @@ const moon=new THREE.Mesh(new THREE.SphereGeometry(1.35,32,32),new THREE.MeshBas
 moon.position.set(-6,7,-7); scene.add(moon);
 const moonGlow=new THREE.PointLight(0xffd978,3,20); moonGlow.position.copy(moon.position); scene.add(moonGlow);
 
-/* ---------- tulips: hero flowers near the path ---------- */
-function makeTulip(color=0xf4c642){
- const g=new THREE.Group();
- const stem=new THREE.Mesh(new THREE.CylinderGeometry(.035,.055,2.2,8),new THREE.MeshStandardMaterial({color:0x52713e,roughness:.8}));
- stem.position.y=1.0; stem.castShadow=true; g.add(stem);
- const petalMat=new THREE.MeshStandardMaterial({color,roughness:.5,metalness:.02});
- // six stylized petals form a tulip cup
- for(let i=0;i<6;i++){
-   const a=i*Math.PI/3;
-   const petal=new THREE.Mesh(new THREE.SphereGeometry(.34,14,10),petalMat);
-   petal.scale.set(.7,.95,.32);
-   petal.position.set(Math.sin(a)*.24,2.12,Math.cos(a)*.24);
-   petal.rotation.x=-.18; petal.rotation.y=a; petal.castShadow=true; g.add(petal);
- }
- const center=new THREE.Mesh(new THREE.SphereGeometry(.17,12,8),new THREE.MeshStandardMaterial({color:0x593b12,roughness:1}));
- center.position.y=2.13; g.add(center);
- const leafMat=new THREE.MeshStandardMaterial({color:0x476537,roughness:.8});
- for(const side of [-1,1]){
-   const leaf=new THREE.Mesh(new THREE.SphereGeometry(.42,12,8),leafMat);
-   leaf.scale.set(.25,.7,.9); leaf.position.set(side*.27,.55,0); leaf.rotation.z=side*.7; leaf.rotation.x=-.35; g.add(leaf);
- }
- return g;
+/* ---------- cielo y sol ---------- */
+function gradTex(stops,radial){
+ const c=document.createElement("canvas"); c.width=c.height=radial?128:2; if(!radial) c.height=256;
+ const x=c.getContext("2d");
+ const g=radial?x.createRadialGradient(64,64,0,64,64,64):x.createLinearGradient(0,0,0,256);
+ for(const [p,col] of stops) g.addColorStop(p,col);
+ x.fillStyle=g; x.fillRect(0,0,c.width,c.height);
+ return new THREE.CanvasTexture(c);
 }
+// ponytail: el amanecer es un tinte sobre un degradado fijo, no un shader de cielo
+const sky=new THREE.Mesh(
+ new THREE.SphereGeometry(120,32,16),
+ new THREE.MeshBasicMaterial({
+   map:gradTex([[0,"#20386e"],[.42,"#7b5f93"],[.7,"#ff9a55"],[.88,"#ffd089"],[1,"#fff0c4"]]),
+   side:THREE.BackSide,fog:false,depthWrite:false
+ })
+);
+sky.material.color.setHex(0x14162a);   // de noche el degradado va casi apagado
+scene.add(sky);
+
+// el sol nace bajo el suelo: el plano del piso le corta la mitad de abajo al salir
+const sun=new THREE.Mesh(new THREE.SphereGeometry(3.4,32,20),new THREE.MeshBasicMaterial({color:0xfff2cc}));
+sun.position.set(-2,-8.5,-64); sun.scale.set(1,.93,1); scene.add(sun);   // achatado, como el sol real en el horizonte
+const sunGlow=new THREE.Mesh(
+ new THREE.PlaneGeometry(34,34),
+ new THREE.MeshBasicMaterial({
+   map:gradTex([[0,"rgba(255,228,164,.95)"],[.22,"rgba(255,186,96,.5)"],[.55,"rgba(255,140,70,.16)"],[1,"rgba(255,120,60,0)"]],true),
+   transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,fog:false
+ })
+);
+sunGlow.position.z=4; sun.add(sunGlow);   // hijo del sol: el suelo también le corta el resplandor
+
+/* ---------- tulips: hero flowers near the path ----------
+   Eran 95 grupos de 9 mallas: ~850 draw calls, y otros tantos en el pase de sombras.
+   Ahora es una geometría fusionada por tinte con los colores horneados en los
+   vértices, instanciada: 3 draw calls en total. */
+const dummy=new THREE.Object3D();
+function tulipGeo(petalHex){
+ const parts=[];
+ const put=(geo,hex,pos,rot,scl)=>{
+   dummy.position.set(...pos);
+   dummy.rotation.set(...(rot||[0,0,0]));
+   dummy.scale.set(...(scl||[1,1,1]));
+   dummy.updateMatrix(); geo.applyMatrix4(dummy.matrix);
+   const c=new THREE.Color(hex),n=geo.attributes.position.count,a=new Float32Array(n*3);
+   for(let i=0;i<n;i++) c.toArray(a,i*3);
+   geo.setAttribute("color",new THREE.BufferAttribute(a,3));
+   geo.deleteAttribute("uv");   // no se usa y hay que igualar atributos para fusionar
+   parts.push(geo);
+ };
+ put(new THREE.CylinderGeometry(.035,.055,2.2,8),0x52713e,[0,1,0]);
+ for(let i=0;i<6;i++){         // seis pétalos estilizados forman la copa
+   const a=i*Math.PI/3;
+   put(new THREE.SphereGeometry(.34,12,8),petalHex,[Math.sin(a)*.24,2.12,Math.cos(a)*.24],[-.18,a,0],[.7,.95,.32]);
+ }
+ put(new THREE.SphereGeometry(.17,10,6),0x593b12,[0,2.13,0]);
+ for(const side of [-1,1]) put(new THREE.SphereGeometry(.42,10,8),0x476537,[side*.27,.55,0],[-.35,0,side*.7],[.25,.7,.9]);
+ return mergeGeometries(parts);
+}
+const tulipMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.65});
+const tulipData=[[],[],[]];
 for(let i=0;i<(MOBILE?48:95);i++){
- const tu=makeTulip(i%5===0?0xffdc55:(i%3===0?0xf2a1a7:0xf0c33c));
- tu.position.set((Math.random()-.5)*22,-1,-Math.random()*18-1);
- tu.scale.setScalar(.32+Math.random()*.3);
- tu.rotation.y=Math.random()*Math.PI; tu.userData.phase=Math.random()*7;
- tulips.add(tu);
+ tulipData[i%7===0?1:(i%3===0?0:2)].push({
+   x:(Math.random()-.5)*22, z:-Math.random()*18-1,
+   s:.32+Math.random()*.3, r:Math.random()*Math.PI, p:Math.random()*7
+ });
+}
+const tulipMeshes=[0xffdc55,0xf2a1a7,0xf0c33c].map((hex,k)=>{
+ const m=new THREE.InstancedMesh(tulipGeo(hex),tulipMat,tulipData[k].length);
+ m.castShadow=true; m.frustumCulled=false;
+ m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+ tulips.add(m); return m;
+});
+function tulipSway(){
+ for(let k=0;k<3;k++){
+   const arr=tulipData[k],m=tulipMeshes[k];
+   for(let i=0;i<arr.length;i++){
+     const d=arr[i];
+     dummy.position.set(d.x,-1,d.z);
+     dummy.rotation.set(0,d.r,Math.sin(t*.9+d.x*.3+d.p)*.06);
+     dummy.scale.setScalar(d.s);
+     dummy.updateMatrix(); m.setMatrixAt(i,dummy.matrix);
+   }
+   m.instanceMatrix.needsUpdate=true;
+ }
 }
 
 /* ---------- the big field: 2 instanced meshes instead of 1600 groups ---------- */
@@ -106,7 +172,6 @@ for(let i=0;i<FIELD_N;i++){
 buds.instanceColor.needsUpdate=true;
 for(const m of [stems,buds]){ m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled=false; }
 const fieldState={growth:0};
-const dummy=new THREE.Object3D();
 function windUpdate(){
  for(let i=0;i<FIELD_N;i++){
    const d=fieldData[i];
@@ -122,16 +187,33 @@ function windUpdate(){
 
 /* ---------- letters ---------- */
 const SPOTS=[{x:-3.4,z:-3.5},{x:2.9,z:-6.5},{x:-.8,z:-10}];
+const W=.95,DP=.68;   // medio ancho / medio fondo del sobre
 function makeLetter(){
  const g=new THREE.Group();
- const paper=new THREE.Mesh(new THREE.BoxGeometry(1.9,.08,1.35),new THREE.MeshStandardMaterial({color:0xf4e4bd,roughness:.9}));
- paper.castShadow=true; paper.receiveShadow=true; g.add(paper);
- const hinge=new THREE.Group(); hinge.position.set(0,.05,-.6); g.add(hinge);
- const flap=new THREE.Mesh(new THREE.ConeGeometry(1.05,1.1,4,1),new THREE.MeshStandardMaterial({color:0xe5cfa0,roughness:1}));
- flap.rotation.x=Math.PI/2; flap.rotation.z=Math.PI/4; flap.scale.z=.62; flap.position.z=.42;
- flap.castShadow=true; hinge.add(flap);
- const seal=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.05,16),new THREE.MeshStandardMaterial({color:0xb8465a,roughness:.4}));
- seal.position.set(0,.09,.06); g.add(seal);
+ const paperMat=new THREE.MeshStandardMaterial({color:0xf6e8c8,roughness:.85});
+ const foldMat=new THREE.MeshStandardMaterial({color:0xe9d5a9,roughness:.95,side:THREE.DoubleSide});
+
+ const body=new THREE.Mesh(new THREE.BoxGeometry(W*2,.06,DP*2),paperMat);
+ body.castShadow=body.receiveShadow=true; g.add(body);
+
+ // ponytail: los tres dobleces son triángulos planos, no papel simulado. Coords (x, -z)
+ const fold=(...pts)=>{
+   const s=new THREE.Shape(); s.moveTo(...pts[0]); for(const p of pts.slice(1)) s.lineTo(...p);
+   const m=new THREE.Mesh(new THREE.ShapeGeometry(s),foldMat);
+   m.rotation.x=-Math.PI/2; m.position.y=.034; m.receiveShadow=true; g.add(m); return m;
+ };
+ fold([-W,DP],[-W,-DP],[-.03,0]);          // solapa izquierda
+ fold([W,-DP],[W,DP],[.03,0]);             // solapa derecha
+ fold([-W,-DP],[W,-DP],[0,-.02]);          // solapa inferior, la que cierra en V
+
+ const hinge=new THREE.Group(); hinge.position.set(0,.036,-DP); g.add(hinge);
+ const flapShape=new THREE.Shape(); flapShape.moveTo(-W,0); flapShape.lineTo(W,0); flapShape.lineTo(0,-DP*1.45);
+ const flap=new THREE.Mesh(new THREE.ShapeGeometry(flapShape),new THREE.MeshStandardMaterial({color:0xefdcb4,roughness:.9,side:THREE.DoubleSide}));
+ flap.rotation.x=-Math.PI/2; flap.castShadow=true; hinge.add(flap);
+
+ const seal=new THREE.Mesh(new THREE.SphereGeometry(.15,18,12),new THREE.MeshStandardMaterial({color:0xb8465a,roughness:.35,metalness:.08}));
+ seal.scale.set(1,.34,1); seal.position.set(0,.055,DP*.42); seal.castShadow=true; g.add(seal);
+
  const note=new THREE.Mesh(
    new THREE.PlaneGeometry(1.5,1.05),
    new THREE.MeshStandardMaterial({color:0xfffaf0,roughness:.95,side:THREE.DoubleSide,transparent:true})
@@ -142,7 +224,7 @@ function makeLetter(){
 }
 for(const s of SPOTS){
  const l=makeLetter();
- l.position.set(s.x,-1.0,s.z);
+ l.position.set(s.x,-1.035,s.z);   // apoyado en el suelo, no flotando
  l.scale.setScalar(.5);
  l.rotation.y=(Math.random()-.5)*.8;
  letters.add(l);
@@ -214,7 +296,7 @@ const intro=$("#intro"), letter=$("#letter"), photoMoment=$("#photoMoment"), fin
 const dots=[...document.querySelectorAll("#progress i")];
 const hint=$("#hint");
 const show=el=>el.classList.add("show");
-const hide=el=>el.classList.remove("show");
+const hide=el=>el.classList.remove("show","active");   // el intro usa .active, no .show
 const setProgress=n=>dots.forEach((d,i)=>d.classList.toggle("on",i<n));
 const say=txt=>{ if(txt) hint.textContent=txt; hint.classList.toggle("show",!!txt) };
 
@@ -274,30 +356,40 @@ async function collect(i){
  setProgress(i+1);
 }
 
-const dawnColor=(c,hex,dur)=>{const k=new THREE.Color(hex);gsap.to(c,{r:k.r,g:k.g,b:k.b,duration:dur,ease:"power2.inOut"})};
+const dawnColor=(c,hex,dur,delay=0)=>{const k=new THREE.Color(hex);gsap.to(c,{r:k.r,g:k.g,b:k.b,duration:dur,delay,ease:"power2.inOut"})};
 async function dawnSequence(){
  document.body.classList.add("dawn");
  say("");
- const D=7;
- // camera lifts off the path and turns to the horizon
- cameraTo({x:0,y:6.2,z:8.5},{x:0,y:2.6,z:-14},D);
+ const D=9;
+ // la cámara se despega del camino y se gira al horizonte, donde va a salir el sol
+ cameraTo({x:0,y:5.6,z:9},{x:0,y:1.9,z:-16},D);
  gsap.to(girl.rotation,{y:Math.PI,duration:2,ease:"power2.inOut"});
  gsap.to(girl.position,{x:0,z:-7,duration:D*.6,ease:"power1.inOut"});
 
- dawnColor(scene.background,0xffc79a,D);
+ // 1. la noche se despinta: primero el violeta del alba, luego el degradado entero
+ dawnColor(sky.material.color,0x554d70,D*.34);
+ dawnColor(sky.material.color,0xffffff,D*.6,D*.34);
  dawnColor(scene.fog.color,0xffbf95,D);
  gsap.to(scene.fog,{density:.012,duration:D,ease:"power2.inOut"});
+
+ // 2. la luna se pone mientras tanto
+ moon.material.transparent=true;
+ gsap.to(moon.position,{x:-13,y:-2,duration:D*.55,ease:"power1.in"});
+ gsap.to(moon.material,{opacity:0,duration:D*.45,ease:"power2.in"});
+ gsap.to(moonGlow,{intensity:0,duration:D*.4});
+
+ // 3. el sol rompe el horizonte y se queda cortado por el suelo
+ gsap.to(sun.position,{y:-.9,duration:D*.78,delay:D*.16,ease:"sine.out"});
+ gsap.to(sunGlow.material,{opacity:.9,duration:D*.55,delay:D*.2});
+ gsap.to(renderer,{toneMappingExposure:1.45,duration:D*.5,delay:D*.34});
+
+ // 4. y recién entonces la luz del sol inunda el campo, rasante y de frente
  dawnColor(hemi.color,0xfff0d8,D); dawnColor(hemi.groundColor,0x8d9a5e,D);
  gsap.to(hemi,{intensity:2.6,duration:D});
- dawnColor(keyLight.color,0xfff1cf,D); gsap.to(keyLight,{intensity:4.4,duration:D});
- gsap.to(keyLight.position,{x:7,y:11,z:-6,duration:D,ease:"power2.inOut"});
+ dawnColor(keyLight.color,0xffd9a0,D); gsap.to(keyLight,{intensity:4.2,duration:D});
+ gsap.to(keyLight.position,{x:-3,y:5.5,z:-22,duration:D,ease:"power2.inOut"});   // contraluz: sombras largas hacia la cámara
  dawnColor(ground.material.color,0x33502c,D);
- dawnColor(moon.material.color,0xfff4d2,D); dawnColor(moonGlow.color,0xffc98a,D);
- gsap.to(moon.position,{x:9,y:5.5,z:-26,duration:D,ease:"power2.inOut"});
- gsap.to(moon.scale,{x:2.1,y:2.1,z:2.1,duration:D,ease:"power2.inOut"});
- gsap.to(moonGlow,{intensity:5,distance:60,duration:D});
  dawnColor(particles.material.color,0xfff6dd,D);
- gsap.to(renderer,{toneMappingExposure:1.32,duration:D});
 
  await wait(1800);
  field.visible=true;
@@ -326,6 +418,7 @@ async function story(){
  $("#progress").classList.remove("show");
  // slow living drift so the final screen never feels like a static image
  gsap.to(camera.position,{x:5,z:6,duration:38,ease:"sine.inOut",yoyo:true,repeat:-1});
+ gsap.to(sun.position,{y:2.2,duration:70,ease:"sine.inOut"});   // el sol sigue subiendo mientras lee
 }
 story();
 
@@ -337,7 +430,6 @@ window.addEventListener("resize",()=>{
 });
 
 function animate(){
- requestAnimationFrame(animate);
  const dt=Math.min(clock.getDelta(),.05); t+=dt;
 
  pose.walk+=((walking?1:0)-pose.walk)*Math.min(1,dt*7);
@@ -351,13 +443,15 @@ function animate(){
  girl.rotation.z=Math.sin(walkT*.5)*.02*pose.walk;
 
  particles.rotation.y=t*.008;
- tulips.children.forEach(o=>{o.rotation.z=Math.sin(t*.9+o.position.x*.3+o.userData.phase)*.06});
+ tulipSway();
  if(field.visible) windUpdate();
 
  camera.lookAt(camTarget);
  renderer.render(scene,camera);
 }
-animate();
+// un solo reloj para tweens y render: nada se pinta a mitad de un tween, y gsap
+// trae lagSmoothing, así que un frame perdido no da un salto
+gsap.ticker.add(animate);
 
 /* ---------- music: same little WebAudio box, now toggleable ---------- */
 /* ---------- piano: síntesis aditiva + martillo + reverb, sin samples ---------- */
