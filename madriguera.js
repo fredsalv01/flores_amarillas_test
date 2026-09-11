@@ -465,7 +465,7 @@ function openMemory(i){
  const m=polaroids[i];
  if(m.seen) return;
  m.seen=true; paused=true; focus=m; say("");
- gsap.killTweensOf(walker); walking=false;
+ gsap.killTweensOf(walker); walker.walking=false;
  gsap.to(m.pol.position,{y:1.65,duration:.9,ease:"back.out(1.5)"});
  gsap.to(m.frameMat,{emissiveIntensity:.55,duration:.6});
  $("#memoryPhoto").src=m.photo;
@@ -559,7 +559,7 @@ function fitCamera(){
 fitCamera();
 addEventListener("resize",fitCamera);
 
-const camPos=new THREE.Vector3(),camLook=new THREE.Vector3(),lookAt=new THREE.Vector3();
+const camPos=new THREE.Vector3(),camLook=new THREE.Vector3(),lookAt=new THREE.Vector3(),fv=new THREE.Vector3();
 placeAt(walker.u-.05,0,camPos); camPos.y=2.4;
 camera.position.copy(camPos);
 lookAt.copy(mouse.position).setY(1.1); camera.lookAt(lookAt);
@@ -608,8 +608,9 @@ function animate(){
  if(finalCam){
    camPos.copy(finalCam); camLook.copy(midEnd);
  }else if(focus){
-   focus.g.getWorldPosition(camLook); camLook.y+=1.15;
-   camPos.copy(camLook).addScaledVector(tmp.subVectors(mouse.position,camLook).setY(0).normalize(),2.4).setY(1.9);
+   focus.pol.getWorldPosition(camLook);          // sigue a la foto mientras se levanta
+   placeAt(focus.u,0,fv);                        // la polaroid mira al centro del tunel: ahi va la camara
+   camPos.copy(camLook).addScaledVector(tmp.subVectors(fv,camLook).setY(0).normalize(),2.7).setY(camLook.y+.5);
  }else{
    placeAt(walker.u-2.6/LEN,walker.lat*.5,camPos); camPos.y=2.5;
    camLook.copy(mouse.position).setY(1.1);
