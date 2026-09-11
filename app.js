@@ -219,9 +219,9 @@ const setProgress=n=>dots.forEach((d,i)=>d.classList.toggle("on",i<n));
 const say=txt=>{ if(txt) hint.textContent=txt; hint.classList.toggle("show",!!txt) };
 
 const letterTexts=[
- "Quería dejarte una carta por aquí... para decirte que incluso en los días normales, haces que mi mundo se sienta especial porque tu estas ahi.",
- "Otra carta, porque una sola no alcanzaba. Me encanta la forma en la que logras que cada momento contigo termine convirtiéndose en un recuerdo enorme.",
- "Y está es la última: si alguna vez dudas de lo especial que eres para mí, vuelve a este lugar. Y recordaras lo mucho que significas para mi."
+ "Fernandita, hoy te quiero hacer presente este detalle para decirte gracias por estar ahí para mí, sacarme unas risas y hacerme olvidar mis problemas en una noche.",
+ "Se que últimamente hemos estado alejados a tal punto que no hablemos por días, pero eso no ha hecho que te deje de querer ni de considerarte, siempre habrá esa conexión y cariño.",
+ "Estos casi 8 meses me he sentido muy bien contigo, ha habido desacuerdos y al inicio distanciamiento, pero siempre lo hemos sabido superar, te quiero mucho Fernandita y no lo digo jugando, te quiero como no tienes idea."
 ];
 function setLetter(i){
  $("#letterText").textContent=letterTexts[i];
