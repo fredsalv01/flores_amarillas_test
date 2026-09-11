@@ -164,7 +164,8 @@ mouse.position.copy(walker.prev);
 
 // ponytail: un solo paso de animacion para las dos ratoncitas
 function stepWalker(st,grp,r,dt){
- placeAt(st.u,st.lat,grp.position);
+ if(st.free) grp.position.copy(st.free);        // en la sala ya no hay curva que seguir
+ else placeAt(st.u,st.lat,grp.position);
  const moved=tmp.subVectors(grp.position,st.prev);
  if(moved.lengthSq()>1e-6){
    const yaw=Math.atan2(moved.x,moved.z);
@@ -345,19 +346,23 @@ for(const u of (MOBILE?[.5]:[.08,.5,.92])) makeLantern(u,(Math.random()-.5)*1.4,
 /* ---------- la sala del final ----------
    Una esfera a BackSide cortada por el mismo suelo plano, igual que el túnel.
    El arco tapa la juntura donde muere el tubo. */
-const END_U=.985;
 const endPoint=PATH.getPointAt(1),endFwd=PATH.getTangentAt(1);
-const herEnd=placeAt(END_U,-.85,new THREE.Vector3());
-const hisEnd=placeAt(END_U,.85,new THREE.Vector3());
-const midEnd=herEnd.clone().lerp(hisEnd,.5); midEnd.y=2;
-const FINAL_CAM=midEnd.clone().addScaledVector(endFwd,5.8); FINAL_CAM.y=2.3;
+// el encuentro pasa en mitad del campo, no en la boca del tunel: si se quedan
+// fuera de la esfera, la propia pared de la sala los tapa
+const C=endPoint.clone().addScaledVector(endFwd,10); C.y=0;
+const camDir=new THREE.Vector3().crossVectors(UP,endFwd).normalize()
+ .multiplyScalar(.8).addScaledVector(endFwd,.6).normalize();      // plano de tres cuartos
+const FINAL_CAM=C.clone().addScaledVector(camDir,5.9); FINAL_CAM.y=2.4;
+const across=new THREE.Vector3().crossVectors(camDir,UP).normalize();   // el eje ancho de la pantalla
+const herEnd=C.clone().addScaledVector(across,-.95);
+const hisEnd=C.clone().addScaledVector(across,.95);
+const midEnd=C.clone(); midEnd.y=1.95;
 const yawTo=(a,b)=>Math.atan2(b.x-a.x,b.z-a.z);
 const chamber=new THREE.Mesh(
- new THREE.SphereGeometry(9.5,32,20),
+ new THREE.SphereGeometry(13,32,20),
  new THREE.MeshStandardMaterial({color:0x745034,roughness:1,side:THREE.BackSide,flatShading:true})
 );
-chamber.position.copy(endPoint).addScaledVector(endFwd,9); chamber.position.y=0;
-scene.add(chamber);
+chamber.position.copy(C); scene.add(chamber);
 const arch=new THREE.Mesh(
  new THREE.TorusGeometry(R,.55,8,26),
  new THREE.MeshStandardMaterial({color:0x5c3d29,roughness:1,flatShading:true})
@@ -384,8 +389,8 @@ const inShot=(x,z)=>{
 for(let i=0;i<FL;i++){
  let x,z,tries=0;
  do{
-   const a=Math.random()*Math.PI*2,rad=2.2+Math.random()*7;
-   x=chamber.position.x+Math.cos(a)*rad; z=chamber.position.z+Math.sin(a)*rad;
+   const a=Math.random()*Math.PI*2,rad=2.6+Math.random()*9;
+   x=C.x+Math.cos(a)*rad; z=C.z+Math.sin(a)*rad;
  }while(inShot(x,z)&&++tries<14);
  flData.push({x,z,s:.45+Math.random()*.5,r:Math.random()*Math.PI,p:Math.random()*7});
  fBuds.setColorAt(i,new THREE.Color(budTints[i%budTints.length]));
@@ -402,8 +407,8 @@ function flowerWind(){
  }
  fStems.instanceMatrix.needsUpdate=true; fBuds.instanceMatrix.needsUpdate=true;
 }
-const chamberLight=new THREE.PointLight(0xffd07a,3.2,24,1.4);
-chamberLight.position.copy(chamber.position).setY(5.5); scene.add(chamberLight);
+const chamberLight=new THREE.PointLight(0xffd07a,3.4,34,1.3);
+chamberLight.position.copy(C).setY(7); scene.add(chamberLight);
 
 /* ---------- el ratoncito y el ramo ---------- */
 const boyRig=makeMouse({fur:0x8f7c6e,acc:0x5b7fa6,boy:true});
@@ -492,55 +497,62 @@ $(".memory-next").addEventListener("click",()=>{
  say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
 });
 
-/* ---------- el final ---------- */
+/* ---------- el final: a partir de aqui manda la historia, no el usuario ---------- */
+const goTo=(st,to,dur)=>{                        // caminar en linea recta, ya sin curva
+ st.walking=true;
+ return tween(st.free,{x:to.x,z:to.z,duration:dur,ease:"power1.inOut"}).then(()=>{st.walking=false});
+};
 async function finale(){
  finaleOn=true; paused=true; say("");
  gsap.killTweensOf(walker);
 
- // 1. ella entra en la sala y la cámara se planta de frente a los dos
+ // 1. sale del tunel y se adentra en el campo de flores
  walker.walking=true;
- await tween(walker,{u:END_U,lat:-.85,duration:3,ease:"power1.inOut"});
- walker.walking=false;
+ await tween(walker,{u:1,lat:0,duration:1.6,ease:"power1.inOut"});
+ walker.free=new THREE.Vector3().copy(mouse.position);
  finalCam=FINAL_CAM;
- await wait(1600);
+ await goTo(walker,herEnd,3.4);
+ await wait(900);
 
- // 2. él llega por detrás, con el ramo
- boyS.u=END_U-2.6/LEN; boyS.lat=.85; placeAt(boyS.u,boyS.lat,boyS.prev);
- boy.visible=true; boyS.walking=true;
- await tween(boyS,{u:END_U,duration:2.4,ease:"power2.out"});
- boyS.walking=false;
+ // 2. el la alcanza, con el ramo
+ boyS.free=endPoint.clone().addScaledVector(across,.6);
+ placeAt(1,0,boyS.prev); boy.visible=true;
+ await goTo(boyS,hisEnd,3.2);
 
  // 3. se miran
  walker.faceYaw=yawTo(herEnd,hisEnd);
  boyS.faceYaw=yawTo(hisEnd,herEnd);
- await wait(1100);
+ await wait(1200);
 
- // 4. le ofrece las flores y ella las recoge
+ // 4. le da las flores
  await tween(boyS,{armLift:-1.15,duration:.7,ease:"power2.out"});
  await wait(400);
  const to=new THREE.Vector3(); rig.hands[0].getWorldPosition(to);
- scene.attach(bouquet);                       // attach conserva la pose en el mundo al cambiar de padre
+ scene.attach(bouquet);                          // attach conserva la pose en el mundo al cambiar de padre
  gsap.to(walker,{armLift:-1,duration:.7,ease:"power2.out"});
  await tween(bouquet.position,{x:to.x,y:to.y,z:to.z,duration:.9,ease:"power2.inOut"});
  rig.hands[0].attach(bouquet);
  gsap.to(boyS,{armLift:-.35,duration:.8,ease:"power2.inOut"});
- await wait(900);
+ await wait(1000);
 
+ // 5. y le dice algo
  show($("#finalMsg"));
 }
 
+// el abrazo: lo unico que queda en manos de quien lo lee
 $("#finalBtn").addEventListener("click",async()=>{
  hide($("#finalMsg"));
- // se acercan, y el corazón crece justo en medio de los dos
- gsap.to(walker,{lat:-.62,armLift:-.75,duration:1.4,ease:"power2.inOut"});
- gsap.to(boyS,{lat:.62,armLift:-.75,duration:1.4,ease:"power2.inOut"});
- await wait(1100);
+ gsap.to(walker.free,{x:midEnd.x-across.x*.42,z:midEnd.z-across.z*.42,duration:1.4,ease:"power2.inOut"});
+ gsap.to(boyS.free,{x:midEnd.x+across.x*.42,z:midEnd.z+across.z*.42,duration:1.4,ease:"power2.inOut"});
+ gsap.to(walker,{armLift:-.95,duration:1.2,ease:"power2.inOut"});
+ gsap.to(boyS,{armLift:-.95,duration:1.2,ease:"power2.inOut"});
+ await wait(1500);
  heartG.visible=true; heartG.scale.setScalar(0);
  gsap.to(heartG.scale,{x:1,y:1,z:1,duration:1.2,ease:"back.out(1.7)"});
  gsap.to(heartLight,{intensity:2.6,duration:1.4});
  gsap.to(renderer,{toneMappingExposure:1.32,duration:2});
  motes.visible=true;
- await wait(1600);
+ await wait(1700);
  show($("#restart"));
 });
 $("#restartBtn").addEventListener("click",()=>location.reload());

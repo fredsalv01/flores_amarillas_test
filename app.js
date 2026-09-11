@@ -16,7 +16,7 @@ renderer.toneMappingExposure=1.12;
 // ponytail: one speed knob covers prefers-reduced-motion for gsap + every wait()
 const SPEED=matchMedia("(prefers-reduced-motion: reduce)").matches?4:1;
 gsap.globalTimeline.timeScale(SPEED);
-const wait=ms=>new Promise(r=>setTimeout(r,ms/SPEED));
+const o=ms=>new Promise(r=>setTimeout(r,ms/SPEED));
 // avanzar tocando donde sea de la pantalla activa, o con Enter/espacio — no solo el botón
 const clickOnce=sel=>new Promise(r=>{
  const btn=document.querySelector(sel);
