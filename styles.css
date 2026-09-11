@@ -566,3 +566,43 @@ body.dawn .progress i {
     display: none;
   }
 }
+
+/* madriguera: el boton de reinicio vive centrado, justo encima del corazon */
+.restart {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 1.2s ease,
+    visibility 1.2s;
+}
+.restart.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.restart button {
+  font: 600 10px "DM Sans", sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fff6f9;
+  background: rgba(198, 62, 112, 0.32);
+  border: 1px solid rgba(255, 214, 231, 0.7);
+  border-radius: 99px;
+  padding: 14px 24px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+@media (hover: hover) {
+  .restart button:hover {
+    background: rgba(214, 84, 133, 0.75);
+    transform: translateY(-2px);
+  }
+}
+.restart button:active {
+  transform: scale(0.97);
+}

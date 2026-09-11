@@ -74,15 +74,23 @@ const endGlow=new THREE.PointLight(0xffd85e,3.4,26,1.4);   // el amarillo del fi
 endGlow.position.copy(PATH.getPointAt(1)).setY(1.6); scene.add(endGlow);
 
 /* ---------- la ratoncita ---------- */
-function makeMouse(){
+function makeMouse(o={}){
  const g=new THREE.Group();
- const fur=new THREE.MeshStandardMaterial({color:0xbaa89b,roughness:.85});
+ const fur=new THREE.MeshStandardMaterial({color:o.fur??0xbaa89b,roughness:.85});
  const skin=new THREE.MeshStandardMaterial({color:0xe9b4b9,roughness:.7});
- const dress=new THREE.MeshStandardMaterial({color:0xd2718a,roughness:.85,side:THREE.DoubleSide});
+ const dress=new THREE.MeshStandardMaterial({color:o.acc??0xd2718a,roughness:.85,side:THREE.DoubleSide});
  const dark=new THREE.MeshStandardMaterial({color:0x241a18,roughness:.5});
 
  const body=new THREE.Mesh(new THREE.CapsuleGeometry(.26,.42,6,12),fur); body.position.y=.74; g.add(body);
- const skirt=new THREE.Mesh(new THREE.ConeGeometry(.42,.5,14,1,true),dress); skirt.position.y=.54; g.add(skirt);
+ if(o.boy){                                    // pajarita en vez de falda: se distinguen de un vistazo
+   for(const side of [-1,1]){
+     const w=new THREE.Mesh(new THREE.ConeGeometry(.11,.17,7),dress);
+     w.position.set(side*.12,.99,.23); w.rotation.z=side*Math.PI/2; g.add(w);
+   }
+   const knot=new THREE.Mesh(new THREE.SphereGeometry(.05,8,6),dress); knot.position.set(0,.99,.25); g.add(knot);
+ }else{
+   const skirt=new THREE.Mesh(new THREE.ConeGeometry(.42,.5,14,1,true),dress); skirt.position.y=.54; g.add(skirt);
+ }
  const head=new THREE.Mesh(new THREE.SphereGeometry(.3,16,12),fur); head.position.set(0,1.2,.02); head.scale.set(1,.95,1.05); g.add(head);
  const snout=new THREE.Mesh(new THREE.ConeGeometry(.14,.32,10),fur); snout.rotation.x=Math.PI/2; snout.position.set(0,1.13,.3); g.add(snout);
  const nose=new THREE.Mesh(new THREE.SphereGeometry(.05,8,6),skin); nose.position.set(0,1.14,.45); g.add(nose);
@@ -97,15 +105,16 @@ function makeMouse(){
    new THREE.Vector3(0,0,0),new THREE.Vector3(.05,.12,-.42),
    new THREE.Vector3(-.1,.42,-.62),new THREE.Vector3(.14,.68,-.42)
  ]),16,.045,6),skin));
- const legs=[],arms=[];
+ const legs=[],arms=[],hands=[];
  for(const side of [-1,1]){
    const hip=new THREE.Group(); hip.position.set(side*.13,.44,0); g.add(hip); legs.push(hip);
    const leg=new THREE.Mesh(new THREE.CapsuleGeometry(.07,.2,4,8),fur); leg.position.y=-.14; hip.add(leg);
    const foot=new THREE.Mesh(new THREE.SphereGeometry(.1,10,8),skin); foot.scale.set(1,.5,1.5); foot.position.set(0,-.3,.06); hip.add(foot);
    const sh=new THREE.Group(); sh.position.set(side*.28,.96,0); g.add(sh); arms.push(sh);
    const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.055,.22,4,8),fur); arm.position.y=-.13; sh.add(arm);
+   const hand=new THREE.Group(); hand.position.y=-.27; sh.add(hand); hands.push(hand);   // donde se agarra el ramo
  }
- return {g,legs,arms,tailG};
+ return {g,legs,arms,hands,tailG};
 }
 const rig=makeMouse();
 const mouse=new THREE.Group(); mouse.add(rig.g); scene.add(mouse);
@@ -146,19 +155,42 @@ function placeAt(u,lat,out){
  return out.copy(p).addScaledVector(tmp2.crossVectors(tan,UP).normalize(),lat);
 }
 
-const walker={u:.03,lat:0};
-let walking=false,walkT=0,facing=0,paused=true;
-const prevPos=new THREE.Vector3();
-placeAt(walker.u,walker.lat,prevPos);
-mouse.position.copy(prevPos);
+const walker={u:.03,lat:0,walking:false,walkT:0,facing:0,armLift:0,prev:new THREE.Vector3()};
+const boyS={u:0,lat:.85,walking:false,walkT:0,facing:0,armLift:0,prev:new THREE.Vector3()};
+let paused=true,finaleOn=false,finalCam=null;
+placeAt(walker.u,walker.lat,walker.prev);
+mouse.position.copy(walker.prev);
+
+// ponytail: un solo paso de animacion para las dos ratoncitas
+function stepWalker(st,grp,r,dt){
+ placeAt(st.u,st.lat,grp.position);
+ const moved=tmp.subVectors(grp.position,st.prev);
+ if(moved.lengthSq()>1e-6){
+   const yaw=Math.atan2(moved.x,moved.z);
+   st.facing+=Math.atan2(Math.sin(yaw-st.facing),Math.cos(yaw-st.facing))*Math.min(1,dt*8);
+ }
+ st.prev.copy(grp.position);
+ if(st.faceYaw!==undefined)   // en el final se miran el uno al otro, no hacia donde andaban
+   st.facing+=Math.atan2(Math.sin(st.faceYaw-st.facing),Math.cos(st.faceYaw-st.facing))*Math.min(1,dt*4);
+ grp.rotation.y=st.facing;
+ const w=st.walking?1:0;
+ st.walkT+=dt*(st.walking?11:0);
+ const swing=Math.sin(st.walkT)*w;
+ r.legs[0].rotation.x=swing*.7; r.legs[1].rotation.x=-swing*.7;
+ r.arms[0].rotation.x=-swing*.55+st.armLift; r.arms[1].rotation.x=swing*.55+st.armLift;
+ r.g.position.y=Math.abs(Math.sin(st.walkT))*.05*w;
+ r.tailG.rotation.y=Math.sin(t*3+st.walkT*.5)*.3;   // la cola se menea siempre, quieta o andando
+}
 
 function walkTo(u,lat){
  const d=Math.abs(u-walker.u)*LEN+Math.abs(lat-walker.lat);
  if(d<.25) return;
- walking=true;
+ walker.walking=true;
  gsap.killTweensOf(walker);
- gsap.to(walker,{u,lat,duration:Math.min(d/2.7,9),ease:"power1.inOut",onComplete:()=>{walking=false}});
+ gsap.to(walker,{u,lat,duration:Math.min(d/2.7,9),ease:"power1.inOut",onComplete:()=>{walker.walking=false}});
 }
+// tween que se puede esperar: asi el guion del final se lee de arriba abajo
+const tween=(o,v)=>new Promise(r=>gsap.to(o,{...v,onComplete:r}));
 
 // marca de destino: sin esto no sabes si el toque registró
 const ring=new THREE.Mesh(new THREE.RingGeometry(.28,.38,24),new THREE.MeshBasicMaterial({color:0xffc885,transparent:true,opacity:0,depthWrite:false}));
@@ -307,7 +339,119 @@ MEMORIES.forEach(m=>{
  makeLantern(m.u,m.side*1.15,2.4);                     // cada recuerdo tiene su farol encima
  polaroids.push({...m,g,pol,frameMat,seen:false});
 });
-for(const u of (MOBILE?[.5]:[.06,.28,.5,.73,.95])) makeLantern(u,(Math.random()-.5)*1.4,1.7);
+for(const u of (MOBILE?[.5]:[.08,.5,.92])) makeLantern(u,(Math.random()-.5)*1.4,1.7);
+
+/* ---------- la sala del final ----------
+   Una esfera a BackSide cortada por el mismo suelo plano, igual que el túnel.
+   El arco tapa la juntura donde muere el tubo. */
+const END_U=.985;
+const endPoint=PATH.getPointAt(1),endFwd=PATH.getTangentAt(1);
+const chamber=new THREE.Mesh(
+ new THREE.SphereGeometry(9.5,32,20),
+ new THREE.MeshStandardMaterial({color:0x745034,roughness:1,side:THREE.BackSide,flatShading:true})
+);
+chamber.position.copy(endPoint).addScaledVector(endFwd,9); chamber.position.y=0;
+scene.add(chamber);
+const arch=new THREE.Mesh(
+ new THREE.TorusGeometry(R,.55,8,26),
+ new THREE.MeshStandardMaterial({color:0x5c3d29,roughness:1,flatShading:true})
+);
+arch.position.copy(endPoint); arch.lookAt(tmp.copy(endPoint).add(endFwd)); scene.add(arch);
+
+// flores amarillas por toda la sala, en un anillo que deja libre el centro
+const FL=MOBILE?110:240;
+const flStem=new THREE.CylinderGeometry(.03,.045,1.5,5); flStem.translate(0,.75,0);
+const flBud=new THREE.SphereGeometry(.24,8,7); flBud.scale(.9,1.15,.9); flBud.translate(0,1.62,0);
+const flowers=new THREE.Group();
+const fStems=new THREE.InstancedMesh(flStem,new THREE.MeshStandardMaterial({color:0x55763f,roughness:.9}),FL);
+const fBuds=new THREE.InstancedMesh(flBud,new THREE.MeshStandardMaterial({roughness:.55}),FL);
+flowers.add(fStems,fBuds); scene.add(flowers);
+const flData=[];
+const budTints=[0xffd54a,0xffc21f,0xf6b93b,0xffe27a];
+for(let i=0;i<FL;i++){
+ const a=Math.random()*Math.PI*2,rad=3.4+Math.random()*5.2;
+ flData.push({
+   x:chamber.position.x+Math.cos(a)*rad, z:chamber.position.z+Math.sin(a)*rad,
+   s:.45+Math.random()*.5, r:Math.random()*Math.PI, p:Math.random()*7
+ });
+ fBuds.setColorAt(i,new THREE.Color(budTints[i%budTints.length]));
+}
+fBuds.instanceColor.needsUpdate=true;
+for(const m of [fStems,fBuds]){ m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled=false; }
+function flowerWind(){
+ for(let i=0;i<FL;i++){
+   const d=flData[i];
+   dummy.position.set(d.x,0,d.z);
+   dummy.rotation.set(0,d.r,Math.sin(t*1.1+d.x*.3+d.p)*.08);
+   dummy.scale.setScalar(d.s);
+   dummy.updateMatrix(); fStems.setMatrixAt(i,dummy.matrix); fBuds.setMatrixAt(i,dummy.matrix);
+ }
+ fStems.instanceMatrix.needsUpdate=true; fBuds.instanceMatrix.needsUpdate=true;
+}
+const chamberLight=new THREE.PointLight(0xffd07a,3.2,24,1.4);
+chamberLight.position.copy(chamber.position).setY(5.5); scene.add(chamberLight);
+
+/* ---------- el ratoncito y el ramo ---------- */
+const boyRig=makeMouse({fur:0x8f7c6e,acc:0x5b7fa6,boy:true});
+const boy=new THREE.Group(); boy.add(boyRig.g); boy.scale.setScalar(1.07); boy.visible=false; scene.add(boy);
+
+function makeBouquet(){
+ const g=new THREE.Group();
+ const stem=new THREE.MeshStandardMaterial({color:0x55763f,roughness:.9});
+ const petal=new THREE.MeshStandardMaterial({color:0xffd23f,roughness:.5});
+ const heartWrap=new THREE.MeshStandardMaterial({color:0xf6ecd6,roughness:.9,side:THREE.DoubleSide});
+ for(let i=0;i<7;i++){
+   const a=i/7*Math.PI*2,lean=.12+Math.random()*.1;
+   const s=new THREE.Mesh(new THREE.CylinderGeometry(.018,.024,.62,5),stem);
+   s.position.set(Math.cos(a)*.06,.31,Math.sin(a)*.06);
+   s.rotation.set(Math.sin(a)*lean,0,-Math.cos(a)*lean); g.add(s);
+   const head=new THREE.Group();
+   head.position.set(Math.cos(a)*.19,.62,Math.sin(a)*.19); g.add(head);
+   for(let k=0;k<5;k++){
+     const p=new THREE.Mesh(new THREE.SphereGeometry(.075,8,6),petal);
+     p.scale.set(1,.45,.6); p.position.set(Math.cos(k/5*6.28)*.07,0,Math.sin(k/5*6.28)*.07);
+     head.add(p);
+   }
+ }
+ const wrap=new THREE.Mesh(new THREE.ConeGeometry(.2,.42,10,1,true),heartWrap);
+ wrap.position.y=.2; g.add(wrap);
+ return g;
+}
+const bouquet=makeBouquet();
+bouquet.position.set(0,-.28,.12); bouquet.rotation.x=.5;
+boyRig.hands[0].add(bouquet);
+
+/* ---------- el corazón ---------- */
+function heartGeo(){
+ const s=new THREE.Shape();
+ s.moveTo(.5,.5);
+ s.bezierCurveTo(.5,.5,.4,0,0,0);
+ s.bezierCurveTo(-.6,0,-.6,.7,-.6,.7);
+ s.bezierCurveTo(-.6,1.1,-.3,1.54,.5,1.9);
+ s.bezierCurveTo(1.2,1.54,1.6,1.1,1.6,.7);
+ s.bezierCurveTo(1.6,.7,1.6,0,1,0);
+ s.bezierCurveTo(.7,0,.5,.5,.5,.5);
+ const g=new THREE.ExtrudeGeometry(s,{depth:.3,bevelEnabled:true,bevelSize:.08,bevelThickness:.06,bevelSegments:2});
+ g.center(); g.rotateZ(Math.PI);          // el perfil clásico nace del revés
+ return g;
+}
+const HEART=heartGeo();
+const heartMat=new THREE.MeshStandardMaterial({color:0xff8bb5,roughness:.35,emissive:0xff4f8b,emissiveIntensity:.75});
+const heartG=new THREE.Group(); heartG.visible=false; scene.add(heartG);
+const heart=new THREE.Mesh(HEART,heartMat); heart.scale.setScalar(.5); heartG.add(heart);
+const heartLight=new THREE.PointLight(0xff6fa5,0,9,1.6); heartG.add(heartLight);
+// corazoncitos que suben alrededor
+const motes=new THREE.InstancedMesh(HEART,new THREE.MeshStandardMaterial({color:0xffa6c6,emissive:0xff5f97,emissiveIntensity:.6,transparent:true,opacity:.9}),14);
+motes.frustumCulled=false; motes.visible=false; scene.add(motes);
+const moteData=[...Array(14)].map(()=>({a:Math.random()*6.28,r:.5+Math.random()*1.3,p:Math.random()*4,s:.05+Math.random()*.05}));
+
+/* ---------- puestas en escena del final ---------- */
+const herEnd=placeAt(END_U,-.85,new THREE.Vector3());
+const hisEnd=placeAt(END_U,.85,new THREE.Vector3());
+const midEnd=herEnd.clone().lerp(hisEnd,.5); midEnd.y=2;
+heartG.position.copy(midEnd);
+motes.position.copy(midEnd);
+const yawTo=(a,b)=>Math.atan2(b.x-a.x,b.z-a.z);
 
 /* ---------- UI ---------- */
 const intro=$("#intro"),memoryScreen=$("#memory"),hint=$("#hint");
@@ -337,6 +481,59 @@ $(".memory-next").addEventListener("click",()=>{
  focus=null; paused=false;
  say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
 });
+
+/* ---------- el final ---------- */
+async function finale(){
+ finaleOn=true; paused=true; say("");
+ gsap.killTweensOf(walker);
+
+ // 1. ella entra en la sala y la cámara se planta de frente a los dos
+ walker.walking=true;
+ await tween(walker,{u:END_U,lat:-.85,duration:3,ease:"power1.inOut"});
+ walker.walking=false;
+ finalCam=midEnd.clone().addScaledVector(endFwd,5.8); finalCam.y=2.3;
+ await wait(1600);
+
+ // 2. él llega por detrás, con el ramo
+ boyS.u=END_U-2.6/LEN; boyS.lat=.85; placeAt(boyS.u,boyS.lat,boyS.prev);
+ boy.visible=true; boyS.walking=true;
+ await tween(boyS,{u:END_U,duration:2.4,ease:"power2.out"});
+ boyS.walking=false;
+
+ // 3. se miran
+ walker.faceYaw=yawTo(herEnd,hisEnd);
+ boyS.faceYaw=yawTo(hisEnd,herEnd);
+ await wait(1100);
+
+ // 4. le ofrece las flores y ella las recoge
+ await tween(boyS,{armLift:-1.15,duration:.7,ease:"power2.out"});
+ await wait(400);
+ const to=new THREE.Vector3(); rig.hands[0].getWorldPosition(to);
+ scene.attach(bouquet);                       // attach conserva la pose en el mundo al cambiar de padre
+ gsap.to(walker,{armLift:-1,duration:.7,ease:"power2.out"});
+ await tween(bouquet.position,{x:to.x,y:to.y,z:to.z,duration:.9,ease:"power2.inOut"});
+ rig.hands[0].attach(bouquet);
+ gsap.to(boyS,{armLift:-.35,duration:.8,ease:"power2.inOut"});
+ await wait(900);
+
+ show($("#finalMsg"));
+}
+
+$("#finalBtn").addEventListener("click",async()=>{
+ hide($("#finalMsg"));
+ // se acercan, y el corazón crece justo en medio de los dos
+ gsap.to(walker,{lat:-.62,armLift:-.75,duration:1.4,ease:"power2.inOut"});
+ gsap.to(boyS,{lat:.62,armLift:-.75,duration:1.4,ease:"power2.inOut"});
+ await wait(1100);
+ heartG.visible=true; heartG.scale.setScalar(0);
+ gsap.to(heartG.scale,{x:1,y:1,z:1,duration:1.2,ease:"back.out(1.7)"});
+ gsap.to(heartLight,{intensity:2.6,duration:1.4});
+ gsap.to(renderer,{toneMappingExposure:1.32,duration:2});
+ motes.visible=true;
+ await wait(1600);
+ show($("#restart"));
+});
+$("#restartBtn").addEventListener("click",()=>location.reload());
 
 /* ---------- tocar el suelo para caminar ---------- */
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
@@ -370,26 +567,26 @@ lookAt.copy(mouse.position).setY(1.1); camera.lookAt(lookAt);
 function animate(){
  const dt=Math.min(clock.getDelta(),.05); t+=dt;
 
- // colocar a la ratoncita en el túnel y orientarla según hacia dónde se movió
- placeAt(walker.u,walker.lat,mouse.position);
- const moved=tmp.subVectors(mouse.position,prevPos);
- if(moved.lengthSq()>1e-6){
-   const yaw=Math.atan2(moved.x,moved.z);
-   facing+=Math.atan2(Math.sin(yaw-facing),Math.cos(yaw-facing))*Math.min(1,dt*8);
- }
- prevPos.copy(mouse.position);
- mouse.rotation.y=facing;
+ stepWalker(walker,mouse,rig,dt);
+ if(boy.visible) stepWalker(boyS,boy,boyRig,dt);
  blob.position.set(mouse.position.x,.02,mouse.position.z);
-
- // ciclo de caminado
- const w=walking?1:0;
- walkT+=dt*(walking?11:0);
- const swing=Math.sin(walkT)*w;
- rig.legs[0].rotation.x=swing*.7; rig.legs[1].rotation.x=-swing*.7;
- rig.arms[0].rotation.x=-swing*.55; rig.arms[1].rotation.x=swing*.55;
- rig.g.position.y=Math.abs(Math.sin(walkT))*.05*w;
- rig.tailG.rotation.y=Math.sin(t*3+walkT*.5)*.3;   // la cola se menea siempre, quieta o andando
  lamp.position.set(mouse.position.x,2.3,mouse.position.z);
+ flowerWind();
+ if(heartG.visible){
+   heart.rotation.y=Math.sin(t*.9)*.25;
+   heart.scale.setScalar(.5*(1+Math.sin(t*2.6)*.06));        // late
+ }
+ if(motes.visible){
+   for(let i=0;i<moteData.length;i++){
+     const d=moteData[i],k=(t*.35+d.p/4)%1;
+     dummy.position.set(Math.cos(d.a+k*1.4)*d.r,k*3.4-.6,Math.sin(d.a+k*1.4)*d.r);
+     dummy.rotation.set(0,t*.8+d.p,Math.sin(t+d.p)*.3);
+     dummy.scale.setScalar(d.s*Math.sin(k*Math.PI));         // nacen y se deshacen
+     dummy.updateMatrix(); motes.setMatrixAt(i,dummy.matrix);
+   }
+   motes.instanceMatrix.needsUpdate=true;
+ }
+ if(!finaleOn&&walker.u>.9) finale();
  for(const l of lanterns) l.rotation.z=Math.sin(t*.62+l.userData.p)*.045;
 
  // ¿hay un recuerdo al alcance?
@@ -398,6 +595,7 @@ function animate(){
    const m=polaroids[i];
    if(!m.seen&&Math.abs(walker.u-m.u)*LEN<2.6) n=i;
  }
+ if(finaleOn) n=-1;
  if(n!==near&&!paused){
    near=n;
    if(n>=0){ gsap.to(polaroids[n].frameMat,{emissiveIntensity:.3,duration:.5}); say("Toca para ver el recuerdo") }
@@ -407,14 +605,16 @@ function animate(){
    polaroids[near].pol.position.y=POL_Y+Math.sin(t*2.4)*.035;   // late, para que se note que es tocable
 
  // cámara: detrás de ella sobre la propia curva, así nunca entra en una pared
- if(focus){
+ if(finalCam){
+   camPos.copy(finalCam); camLook.copy(midEnd);
+ }else if(focus){
    focus.g.getWorldPosition(camLook); camLook.y+=1.15;
    camPos.copy(camLook).addScaledVector(tmp.subVectors(mouse.position,camLook).setY(0).normalize(),2.4).setY(1.9);
  }else{
    placeAt(walker.u-2.6/LEN,walker.lat*.5,camPos); camPos.y=2.5;
    camLook.copy(mouse.position).setY(1.1);
  }
- camera.position.lerp(camPos,1-Math.exp(-dt*(focus?3.2:2.4)));
+ camera.position.lerp(camPos,1-Math.exp(-dt*(finalCam?1.6:focus?3.2:2.4)));
  lookAt.lerp(camLook,1-Math.exp(-dt*4.5));
  camera.lookAt(lookAt);
 
