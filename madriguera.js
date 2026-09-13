@@ -143,7 +143,7 @@ for(let i=0;i<=SEG;i++){
  const u=i/SEG,p=PATH.getPointAt(u),tan=PATH.getTangentAt(u);
  SAMP.push({u,p,side:new THREE.Vector3().crossVectors(tan,UP).normalize()});
 }
-const LAT_MAX=R*.44;   // el pasillo caminable, más estrecho que el túnel: no entra en los objetos
+const LAT_MAX=R*.17;   // carril central: andar de lado no aporta nada y la metia dentro de los trastos
 function toPath(point){
  let best=SAMP[0],bd=Infinity;
  for(const s of SAMP){ const d=s.p.distanceToSquared(point); if(d<bd){bd=d;best=s} }
@@ -318,10 +318,16 @@ MEMORIES.forEach(m=>{
  placeAt(m.u,m.side*m.lat,g.position);                // fuera del pasillo caminable
  g.lookAt(placeAt(m.u,0,tmp2.clone()));               // +Z mira al centro del túnel
  const obj=m.shape();
- obj.rotation.y=(Math.random()-.5)*.5; g.add(obj);
+ obj.rotation.y=(Math.random()-.5)*.5;
+ // se mide ANTES de emparentar: sin padre, la caja ya sale en el espacio del
+ // grupo. El tope evita que un adorno fino (la hebra del carrete llega a 1.9)
+ // empuje la foto hasta el medio del pasillo.
+ const box=new THREE.Box3().setFromObject(obj);
+ const pz=THREE.MathUtils.clamp(box.max.z+.3,.9,1.6);
+ g.add(obj);
 
  const pol=new THREE.Group();
- pol.position.set((Math.random()-.5)*.3,POL_Y,1.15);  // delante del objeto
+ pol.position.set((Math.random()-.5)*.3,POL_Y,pz);    // justo delante del objeto
  pol.rotation.set(-.13,(Math.random()-.5)*.35,(Math.random()-.5)*.1);
  g.add(pol);
  const frameMat=new THREE.MeshStandardMaterial({color:0xfbf6ea,roughness:.75,emissive:0xffbb66,emissiveIntensity:.14});
@@ -339,7 +345,7 @@ MEMORIES.forEach(m=>{
 
  scene.add(g);
  makeLantern(m.u,m.side*1.15,2.4);                     // cada recuerdo tiene su farol encima
- polaroids.push({...m,g,pol,frameMat,seen:false});
+ polaroids.push({...m,g,pol,frameMat,pz,seen:false});
 });
 for(const u of (MOBILE?[.5]:[.08,.5,.92])) makeLantern(u,(Math.random()-.5)*1.4,1.7);
 
@@ -482,7 +488,7 @@ function openMemory(i){
  if(m.seen) return;
  m.seen=true; paused=true; focus=m; say("");
  gsap.killTweensOf(walker); walker.walking=false;
- gsap.to(m.pol.position,{y:1.65,duration:.9,ease:"back.out(1.5)"});
+ gsap.to(m.pol.position,{y:1.62,z:m.pz+.75,duration:.9,ease:"back.out(1.5)"});
  gsap.to(m.frameMat,{emissiveIntensity:.55,duration:.6});
  $("#memoryPhoto").src=m.photo;
  $("#memoryText").textContent=m.text;
@@ -492,7 +498,7 @@ function openMemory(i){
 }
 $("#memory .memory-next").addEventListener("click",()=>{
  hide(memoryScreen);
- gsap.to(focus.pol.position,{y:POL_Y,duration:.7,ease:"power2.inOut"});
+ gsap.to(focus.pol.position,{y:POL_Y,z:focus.pz,duration:.7,ease:"power2.inOut"});
  gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});   // ya visto: deja de llamar
  focus=null; paused=false;
  say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
