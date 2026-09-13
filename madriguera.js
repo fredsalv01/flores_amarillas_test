@@ -156,9 +156,9 @@ function placeAt(u,lat,out){
  return out.copy(p).addScaledVector(tmp2.crossVectors(tan,UP).normalize(),lat);
 }
 
-const walker={u:.03,lat:0,walking:false,walkT:0,facing:0,armLift:0,prev:new THREE.Vector3()};
+const walker={u:.09,lat:0,walking:false,walkT:0,facing:0,armLift:0,prev:new THREE.Vector3()};
 const boyS={u:0,lat:.85,walking:false,walkT:0,facing:0,armLift:0,prev:new THREE.Vector3()};
-let paused=true,finaleOn=false,finalCam=null;
+let paused=true,finaleOn=false,finalCam=null,introCam=true;
 placeAt(walker.u,walker.lat,walker.prev);
 mouse.position.copy(walker.prev);
 
@@ -659,6 +659,11 @@ function animate(){
    focus.pol.getWorldPosition(camLook);          // sigue a la foto mientras se levanta
    placeAt(focus.u,0,fv);                        // la polaroid mira al centro del tunel: ahi va la camara
    camPos.copy(camLook).addScaledVector(tmp.subVectors(fv,camLook).setY(0).normalize(),2.7).setY(camLook.y+.5);
+ }else if(introCam){
+   const a=Math.sin(t*.15)*.4;                  // deriva lenta: un plano quieto parece colgado
+   placeAt(walker.u-Math.cos(a)*5.2/LEN,THREE.MathUtils.clamp(Math.sin(a)*5.2,-R*.7,R*.7),camPos);
+   camPos.y=3.4;
+   camLook.copy(mouse.position).setY(1.15);
  }else{
    // se recoloca detras de su direccion de marcha: al volver sobre sus pasos
    // la camara rodea por el lado en vez de cruzarla por encima
@@ -681,11 +686,39 @@ function animate(){
 }
 gsap.ticker.add(animate);   // un solo reloj para tweens y render
 
+/* ---------- la historia, antes de soltarle el control ---------- */
+const STORY=[
+ {k:"Esta mañana",
+  t:"Se despertó y él no estaba. En su sitio había una nota doblada con demasiado cuidado, de esas que tardan más en doblarse que en escribirse."},
+ {k:"La nota decía",
+  t:"«Hoy te tengo una sorpresa. Baja a la madriguera y camina hasta el fondo: te fui dejando cosas por el camino. Nuestras cosas.»"},
+ {k:"Así que bajó a buscarlo",
+  t:"Cogió su farolito y se metió en el túnel. Cuatro recuerdos la esperaban en la oscuridad, y él al final de todos.",
+  c:"Toca el suelo para caminar · Arrastra para mirar"}
+];
+const storyScreen=$("#story");
+let beat=0;
+function showBeat(){
+ const b=STORY[beat];
+ $("#storyKicker").textContent=b.k;
+ $("#storyText").textContent=b.t;
+ const ctrl=$("#storyControls");
+ ctrl.textContent=b.c||""; ctrl.hidden=!b.c;
+ $("#storyNext").textContent=beat<STORY.length-1?"Seguir →":"Entrar en la madriguera →";
+ show(storyScreen);
+}
+// ponytail: un solo listener en el contenedor. El clic del boton burbujea hasta
+// aqui, asi que sirve tocar donde sea sin duplicar manejadores
+storyScreen.addEventListener("pointerdown",()=>{
+ if(++beat<STORY.length) return showBeat();
+ hide(storyScreen);
+ introCam=false; paused=false;
+ $("#progress").classList.add("show");
+});
+
 /* ---------- arranque ---------- */
 $("#begin").addEventListener("click",()=>{
  hide(intro);
- paused=false;
- $("#progress").classList.add("show");
- say("Toca el suelo para caminar");
+ beat=0; showBeat();
 });
 setTimeout(()=>{$("#loading").style.opacity=0;setTimeout(()=>$("#loading").remove(),800)},700);

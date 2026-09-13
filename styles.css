@@ -609,3 +609,15 @@ body.dawn .progress i {
 
 /* madriguera: el canvas se arrastra para girar la camara, que el navegador no se lo quede */
 #scene { touch-action: none; }
+
+/* madriguera: el box de la historia inicial, un poco mas ancho que el de recuerdo */
+.story-card {
+  width: min(470px, 86%);
+}
+.story-controls {
+  font: 600 9px "DM Sans", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  margin: -4px 0 20px;
+}
