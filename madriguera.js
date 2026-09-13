@@ -490,7 +490,7 @@ function openMemory(i){
  dots[i].classList.add("on");
  seen++;
 }
-$(".memory-next").addEventListener("click",()=>{
+$("#memory .memory-next").addEventListener("click",()=>{
  hide(memoryScreen);
  gsap.to(focus.pol.position,{y:POL_Y,duration:.7,ease:"power2.inOut"});
  gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});   // ya visto: deja de llamar
