@@ -324,7 +324,7 @@ MEMORIES.forEach(m=>{
  pol.position.set((Math.random()-.5)*.3,POL_Y,1.15);  // delante del objeto
  pol.rotation.set(-.13,(Math.random()-.5)*.35,(Math.random()-.5)*.1);
  g.add(pol);
- const frameMat=new THREE.MeshStandardMaterial({color:0xfbf6ea,roughness:.75,emissive:0xffbb66,emissiveIntensity:0});
+ const frameMat=new THREE.MeshStandardMaterial({color:0xfbf6ea,roughness:.75,emissive:0xffbb66,emissiveIntensity:.14});
  pol.add(new THREE.Mesh(new THREE.BoxGeometry(1.15,1.35,.04),frameMat));
  // la foto va arriba: el borde gordo de abajo es lo que hace que se lea "polaroid"
  const photoMat=new THREE.MeshStandardMaterial({color:0x2a2320,roughness:.6});
@@ -474,7 +474,8 @@ const dots=[...document.querySelectorAll("#progress i")];
 const show=el=>el.classList.add("show");
 const hide=el=>el.classList.remove("show","active");
 const say=txt=>{ if(txt) hint.textContent=txt; hint.classList.toggle("show",!!txt) };
-let seen=0,near=-1,focus=null;
+let seen=0,near=-1,focus=null,lastHint="";
+const behind=()=>polaroids.some(m=>!m.seen&&m.u<walker.u-.005);
 
 function openMemory(i){
  const m=polaroids[i];
@@ -492,7 +493,7 @@ function openMemory(i){
 $(".memory-next").addEventListener("click",()=>{
  hide(memoryScreen);
  gsap.to(focus.pol.position,{y:POL_Y,duration:.7,ease:"power2.inOut"});
- gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});
+ gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});   // ya visto: deja de llamar
  focus=null; paused=false;
  say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
 });
@@ -557,12 +558,31 @@ $("#finalBtn").addEventListener("click",async()=>{
 });
 $("#restartBtn").addEventListener("click",()=>location.reload());
 
-/* ---------- tocar el suelo para caminar ---------- */
+/* ---------- caminar y mirar ----------
+   Un toque manda a la ratoncita ahi. Un arrastre gira la camara a su
+   alrededor. Se distinguen por cuanto se movio el dedo: sin esto no se
+   puede volver sobre los pasos, porque solo se puede tocar lo que se ve. */
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
+const CAM_D=2.9;                     // radio al que orbita la camara
+let camA=0,camAim=0,camPrevU=walker.u,drag=null;
+
 addEventListener("pointerdown",e=>{
  if(paused||e.target!==canvas) return;
- if(near>=0){ openMemory(near); return }      // si está al lado de un recuerdo, el toque lo abre
- ndc.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);
+ drag={x:e.clientX,y:e.clientY,a:camA,moved:0};
+});
+addEventListener("pointermove",e=>{
+ if(!drag) return;
+ const dx=e.clientX-drag.x;
+ drag.moved=Math.max(drag.moved,Math.abs(dx)+Math.abs(e.clientY-drag.y));
+ camA=drag.a-dx*.007;
+ camAim=camA;                        // mirar a mano manda sobre el encuadre automatico
+});
+addEventListener("pointerup",()=>{
+ const d=drag; drag=null;
+ if(!d||paused) return;
+ if(d.moved>10) return;              // fue un giro de camara, no un destino
+ if(near>=0){ openMemory(near); return }
+ ndc.set(d.x/innerWidth*2-1,-(d.y/innerHeight)*2+1);
  ray.setFromCamera(ndc,camera);
  const hit=ray.intersectObject(floor)[0];
  if(!hit) return;
@@ -608,7 +628,8 @@ function animate(){
    }
    motes.instanceMatrix.needsUpdate=true;
  }
- if(!finaleOn&&walker.u>.9) finale();
+ // no se remata la historia con recuerdos sin abrir: se avisa y se espera
+ if(!finaleOn&&walker.u>.9&&seen>=polaroids.length) finale();
  for(const l of lanterns) l.rotation.z=Math.sin(t*.62+l.userData.p)*.045;
 
  // ¿hay un recuerdo al alcance?
@@ -619,9 +640,14 @@ function animate(){
  }
  if(finaleOn) n=-1;
  if(n!==near&&!paused){
+   if(n>=0) gsap.to(polaroids[n].frameMat,{emissiveIntensity:.5,duration:.5});
    near=n;
-   if(n>=0){ gsap.to(polaroids[n].frameMat,{emissiveIntensity:.3,duration:.5}); say("Toca para ver el recuerdo") }
-   else say("Toca el suelo para caminar");
+ }
+ if(!paused&&!finaleOn){
+   const h=near>=0?"Toca para ver el recuerdo"
+     :behind()?"Te dejaste un recuerdo atrás — arrastra para mirar"
+     :"Toca el suelo para caminar";
+   if(h!==lastHint){ lastHint=h; say(h) }
  }
  if(near>=0&&polaroids[near]&&!polaroids[near].seen)
    polaroids[near].pol.position.y=POL_Y+Math.sin(t*2.4)*.035;   // late, para que se note que es tocable
@@ -634,7 +660,17 @@ function animate(){
    placeAt(focus.u,0,fv);                        // la polaroid mira al centro del tunel: ahi va la camara
    camPos.copy(camLook).addScaledVector(tmp.subVectors(fv,camLook).setY(0).normalize(),2.7).setY(camLook.y+.5);
  }else{
-   placeAt(walker.u-2.6/LEN,walker.lat*.5,camPos); camPos.y=2.5;
+   // se recoloca detras de su direccion de marcha: al volver sobre sus pasos
+   // la camara rodea por el lado en vez de cruzarla por encima
+   if(walker.walking&&!drag){
+     const du=walker.u-camPrevU;
+     if(Math.abs(du)>1e-5) camAim=du>0?0:Math.PI;
+   }
+   camPrevU=walker.u;
+   camA+=Math.atan2(Math.sin(camAim-camA),Math.cos(camAim-camA))*(1-Math.exp(-dt*1.3));
+   const c=Math.cos(camA),sn=Math.sin(camA);
+   placeAt(walker.u-c*CAM_D/LEN,THREE.MathUtils.clamp(walker.lat*.6+sn*CAM_D,-R*.72,R*.72),camPos);
+   camPos.y=2.5;
    camLook.copy(mouse.position).setY(1.1);
  }
  camera.position.lerp(camPos,1-Math.exp(-dt*(finalCam?1.6:focus?3.2:2.4)));

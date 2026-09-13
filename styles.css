@@ -606,3 +606,6 @@ body.dawn .progress i {
 .restart button:active {
   transform: scale(0.97);
 }
+
+/* madriguera: el canvas se arrastra para girar la camara, que el navegador no se lo quede */
+#scene { touch-action: none; }
