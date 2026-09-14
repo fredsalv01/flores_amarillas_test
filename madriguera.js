@@ -92,13 +92,17 @@ function makeMouse(o={}){
  }else{
    const skirt=new THREE.Mesh(new THREE.ConeGeometry(.42,.5,14,1,true),dress); skirt.position.y=.54; g.add(skirt);
  }
- const head=new THREE.Mesh(new THREE.SphereGeometry(.3,16,12),fur); head.position.set(0,1.2,.02); head.scale.set(1,.95,1.05); g.add(head);
- const snout=new THREE.Mesh(new THREE.ConeGeometry(.14,.32,10),fur); snout.rotation.x=Math.PI/2; snout.position.set(0,1.13,.3); g.add(snout);
- const nose=new THREE.Mesh(new THREE.SphereGeometry(.05,8,6),skin); nose.position.set(0,1.14,.45); g.add(nose);
+ // la cabeza en su propio grupo, con el pivote en el cuello: asi puede mirar
+ // alrededor sin que el hocico se quede atras
+ const headG=new THREE.Group(); headG.position.y=1.05; g.add(headG);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.3,16,12),fur); head.position.set(0,.15,.02); head.scale.set(1,.95,1.05); headG.add(head);
+ const snout=new THREE.Mesh(new THREE.ConeGeometry(.14,.32,10),fur); snout.rotation.x=Math.PI/2; snout.position.set(0,.08,.3); headG.add(snout);
+ const nose=new THREE.Mesh(new THREE.SphereGeometry(.05,8,6),skin); nose.position.set(0,.09,.45); headG.add(nose);
+ const ears=[],eyes=[];
  for(const side of [-1,1]){
-   const ear=new THREE.Mesh(new THREE.SphereGeometry(.17,12,10),fur); ear.scale.set(1,1,.35); ear.position.set(side*.22,1.42,-.02); g.add(ear);
-   const inner=new THREE.Mesh(new THREE.SphereGeometry(.11,10,8),skin); inner.scale.set(1,1,.3); inner.position.set(side*.23,1.42,.03); g.add(inner);
-   const eye=new THREE.Mesh(new THREE.SphereGeometry(.045,8,6),dark); eye.position.set(side*.12,1.24,.25); g.add(eye);
+   const ear=new THREE.Mesh(new THREE.SphereGeometry(.17,12,10),fur); ear.scale.set(1,1,.35); ear.position.set(side*.22,.37,-.02); headG.add(ear); ears.push(ear);
+   const inner=new THREE.Mesh(new THREE.SphereGeometry(.11,10,8),skin); inner.scale.set(1,1,.3); inner.position.set(side*.23,.37,.03); headG.add(inner);
+   const eye=new THREE.Mesh(new THREE.SphereGeometry(.045,8,6),dark); eye.position.set(side*.12,.19,.25); headG.add(eye); eyes.push(eye);
  }
  // cola: tubo fijo, el meneo es rotar el grupo entero
  const tailG=new THREE.Group(); tailG.position.set(0,.58,-.24); g.add(tailG);
@@ -115,7 +119,7 @@ function makeMouse(o={}){
    const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.055,.22,4,8),fur); arm.position.y=-.13; sh.add(arm);
    const hand=new THREE.Group(); hand.position.y=-.27; sh.add(hand); hands.push(hand);   // donde se agarra el ramo
  }
- return {g,legs,arms,hands,tailG};
+ return {g,legs,arms,hands,tailG,headG,body,ears,eyes};
 }
 const rig=makeMouse();
 const mouse=new THREE.Group(); mouse.add(rig.g); scene.add(mouse);
@@ -156,8 +160,8 @@ function placeAt(u,lat,out){
  return out.copy(p).addScaledVector(tmp2.crossVectors(tan,UP).normalize(),lat);
 }
 
-const walker={u:.09,lat:0,walking:false,walkT:0,facing:0,armLift:0,prev:new THREE.Vector3()};
-const boyS={u:0,lat:.85,walking:false,walkT:0,facing:0,armLift:0,prev:new THREE.Vector3()};
+const walker={u:.09,lat:0,walking:false,walkT:0,facing:0,armLift:0,p:1.7,prev:new THREE.Vector3()};
+const boyS={u:0,lat:.85,walking:false,walkT:0,facing:0,armLift:0,p:4.3,prev:new THREE.Vector3()};
 let paused=true,finaleOn=false,finalCam=null,introCam=true;
 placeAt(walker.u,walker.lat,walker.prev);
 mouse.position.copy(walker.prev);
@@ -180,8 +184,17 @@ function stepWalker(st,grp,r,dt){
  const swing=Math.sin(st.walkT)*w;
  r.legs[0].rotation.x=swing*.7; r.legs[1].rotation.x=-swing*.7;
  r.arms[0].rotation.x=-swing*.55+st.armLift; r.arms[1].rotation.x=swing*.55+st.armLift;
- r.g.position.y=Math.abs(Math.sin(st.walkT))*.05*w;
  r.tailG.rotation.y=Math.sin(t*3+st.walkT*.5)*.3;   // la cola se menea siempre, quieta o andando
+
+ // parada no es muerta: las pausas de lectura son largas y es cuando se la mira
+ const idle=1-w,br=Math.sin(t*1.5+st.p);
+ r.g.position.y=Math.abs(Math.sin(st.walkT))*.05*w+br*.02*idle;
+ r.body.scale.y=1+br*.035*idle;                                    // respira
+ if(st.faceYaw===undefined) r.headG.rotation.y=Math.sin(t*.33+st.p)*.22*idle;   // mira alrededor
+ const bk=(t*.9+st.p)%4.6,lid=bk<.14?Math.abs(bk/.07-1):1;         // parpadeo cada ~5s
+ r.eyes[0].scale.y=r.eyes[1].scale.y=Math.max(.1,lid);
+ const tw=Math.pow(Math.max(0,Math.sin(t*.62+st.p*2)),12);         // oreja: picos sueltos
+ r.ears[0].rotation.z=tw*.3; r.ears[1].rotation.z=-tw*.3;
 }
 
 function walkTo(u,lat){
@@ -493,6 +506,7 @@ function openMemory(i){
  $("#memoryPhoto").src=m.photo;
  $("#memoryText").textContent=m.text;
  setTimeout(()=>show(memoryScreen),700/SPEED);
+ music.duck(true);
  dots[i].classList.add("on");
  seen++;
 }
@@ -500,7 +514,7 @@ $("#memory .memory-next").addEventListener("click",()=>{
  hide(memoryScreen);
  gsap.to(focus.pol.position,{y:POL_Y,z:focus.pz,duration:.7,ease:"power2.inOut"});
  gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});   // ya visto: deja de llamar
- focus=null; paused=false;
+ focus=null; paused=false; music.duck(false);
  say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
 });
 
@@ -510,7 +524,7 @@ const goTo=(st,to,dur)=>{                        // caminar en linea recta, ya s
  return tween(st.free,{x:to.x,z:to.z,duration:dur,ease:"power1.inOut"}).then(()=>{st.walking=false});
 };
 async function finale(){
- finaleOn=true; paused=true; say("");
+ finaleOn=true; paused=true; say(""); music.brighten();
  gsap.killTweensOf(walker);
 
  // 1. sale del tunel y se adentra en el campo de flores
@@ -543,12 +557,13 @@ async function finale(){
  await wait(1000);
 
  // 5. y le dice algo
+ music.duck(true);
  show($("#finalMsg"));
 }
 
 // el abrazo: lo unico que queda en manos de quien lo lee
 $("#finalBtn").addEventListener("click",async()=>{
- hide($("#finalMsg"));
+ hide($("#finalMsg")); music.duck(false);
  gsap.to(walker.free,{x:midEnd.x-across.x*.42,z:midEnd.z-across.z*.42,duration:1.4,ease:"power2.inOut"});
  gsap.to(boyS.free,{x:midEnd.x+across.x*.42,z:midEnd.z+across.z*.42,duration:1.4,ease:"power2.inOut"});
  gsap.to(walker,{armLift:-.95,duration:1.2,ease:"power2.inOut"});
@@ -692,6 +707,128 @@ function animate(){
 }
 gsap.ticker.add(animate);   // un solo reloj para tweens y render
 
+
+/* ---------- piano: aditiva + martillo + reverb, sin un solo sample ----------
+   Generativo a proposito: la experiencia no dura lo mismo dos veces, asi que
+   una cancion grabada se desincroniza siempre. Esto dura lo que ella tarde,
+   baja cuando hay algo que leer y se abre al llegar al final. */
+const music=(()=>{
+ const VOL=.3;
+ const SEMI={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+ const hz=n=>440*Math.pow(2,(SEMI[n[0]]+(n[1]==="#"?1:0)+(+n.slice(-1)+1)*12-69)/12);
+
+ // vuelta menor, lenta y con aire: el animo de un tunel con farolitos
+ const PROG=[
+  ["A1",["A2","C3","E3","A3"]],    // Am
+  ["G1",["G2","B2","E3","G3"]],    // Em/G
+  ["F1",["F2","A2","C3","F3"]],    // F
+  ["C2",["C3","E3","G3","C4"]],    // C
+  ["D2",["D3","F3","A3","D4"]],    // Dm
+  ["C2",["C3","E3","A3","C4"]],    // Am/C
+  ["E1",["E2","G#2","B2","E3"]],   // E: el acorde que duele
+  ["A1",["A2","C3","E3","A3"]]     // Am
+ ];
+ const ARP=[0,1,2,3,2,1,3,2];       // ocho corcheas, mano izquierda
+ const MEL=[                        // melodia escrita y con silencios, no notas al azar
+  [[0,"A4",2],[2.5,"C5",1.5]],
+  [[0,"B4",1.5],[1.5,"E5",2.5]],
+  [[0,"C5",2],[2.5,"A4",1.5]],
+  [[0,"G4",3]],
+  [[0,"F4",1.5],[1.5,"A4",1],[2.5,"D5",1.5]],
+  [[0,"E5",2],[2.5,"C5",1.5]],
+  [[0,"B4",1.5],[1.5,"G#4",2.5]],
+  [[0,"A4",3.5]]
+ ];
+
+ let ctx,master,tone,dry,wet,noiseBuf,bar=0,next=0,tempo=52;
+ let bright=false,on=true,ducked=false;
+ const level=()=>on?(ducked?VOL*.4:VOL):0;
+ const applyGain=()=>{ if(ctx) master.gain.linearRampToValueAtTime(level(),ctx.currentTime+.45) };
+
+ function impulse(sec,decay){
+   const len=ctx.sampleRate*sec,buf=ctx.createBuffer(2,len,ctx.sampleRate);
+   for(let c=0;c<2;c++){
+     const d=buf.getChannelData(c);
+     for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);
+   }
+   return buf;
+ }
+ // cuerpo de la nota: parciales con afinacion estirada = timbre de piano
+ const PARTIALS=[[1,1],[2,.4],[3,.17],[4,.08],[5,.04],[6,.02]].slice(0,MOBILE?4:6);
+ function piano(note,at,beats,vel){
+   const f=hz(note),beat=60/tempo,dur=beats*beat;
+   const env=ctx.createGain(); env.connect(tone);
+   env.gain.setValueAtTime(.0001,at);
+   env.gain.exponentialRampToValueAtTime(vel,at+.008);
+   env.gain.exponentialRampToValueAtTime(vel*.3,at+.4);        // caida del golpe
+   env.gain.exponentialRampToValueAtTime(.0001,at+dur+1.8);    // cola con pedal
+   for(const [h,a] of PARTIALS){
+     if(f*h>12000) break;
+     const o=ctx.createOscillator(),g=ctx.createGain();
+     o.type=h===1?"triangle":"sine";
+     o.frequency.value=f*h*(1+.0006*h*h);   // inarmonicidad: sin esto suena a organo
+     g.gain.value=a;
+     o.connect(g); g.connect(env); o.start(at); o.stop(at+dur+2);
+   }
+   const thud=ctx.createBufferSource(),tg=ctx.createGain(),tf=ctx.createBiquadFilter();
+   thud.buffer=noiseBuf; tf.type="bandpass"; tf.frequency.value=f*2.2; tf.Q.value=.7;
+   tg.gain.setValueAtTime(vel*.5,at); tg.gain.exponentialRampToValueAtTime(.0001,at+.09);
+   thud.connect(tf); tf.connect(tg); tg.connect(env); thud.start(at); thud.stop(at+.1);
+ }
+
+ function scheduleBar(){
+   const beat=60/tempo,barLen=beat*4,b=bar%8,[bass,chord]=PROG[b],swell=.85+.15*Math.sin(bar*.6);
+   if(next<ctx.currentTime) next=ctx.currentTime+.06;   // volver de segundo plano sin avalancha
+   const t0=next;
+   piano(bass,t0,4,.18*swell);
+   ARP.forEach((k,i)=>piano(chord[k],t0+i*beat*.5,.5,(i%2?.05:.07)*swell));
+   for(const [off,n,d] of MEL[b]){
+     piano(n,t0+off*beat,d,.12*swell);
+     if(bright) piano(n.slice(0,-1)+(+n.slice(-1)-1),t0+off*beat,d,.05*swell);   // octava grave al final
+   }
+   bar++; next=t0+barLen;
+   setTimeout(scheduleBar,Math.max(30,(next-ctx.currentTime-.25)*1000));
+ }
+
+ return {
+   start(){
+     const Ctx=window.AudioContext||window.webkitAudioContext;
+     if(!Ctx||ctx) return;
+     ctx=new Ctx();
+     ctx.resume();   // iOS arranca suspendido aunque venga de un toque
+
+     noiseBuf=impulse(.12,1);
+     master=ctx.createGain(); master.gain.value=VOL;
+     const comp=ctx.createDynamicsCompressor();   // red por si coinciden muchas colas
+     master.connect(comp); comp.connect(ctx.destination);
+
+     tone=ctx.createBiquadFilter(); tone.type="lowpass"; tone.frequency.value=2200; tone.Q.value=.4;
+     const rev=ctx.createConvolver(); rev.buffer=impulse(3.6,2.2);   // cola larga: suena a bajo tierra
+     dry=ctx.createGain(); dry.gain.value=.78;
+     wet=ctx.createGain(); wet.gain.value=.5;
+     tone.connect(dry); dry.connect(master);
+     tone.connect(rev); rev.connect(wet); wet.connect(master);
+
+     addEventListener("visibilitychange",()=>{document.hidden?ctx.suspend():ctx.resume()});
+     next=ctx.currentTime+.4;
+     scheduleBar();
+   },
+   duck(d){ ducked=d; applyGain() },                 // baja cuando hay algo que leer
+   brighten(){                                       // el final: mas luz y algo mas de paso
+     if(!ctx) return;
+     bright=true; tempo=62;
+     tone.frequency.linearRampToValueAtTime(3800,ctx.currentTime+7);
+     wet.gain.linearRampToValueAtTime(.6,ctx.currentTime+7);
+   },
+   toggle(){ on=!on; applyGain(); return on }
+ };
+})();
+$("#sound").addEventListener("click",()=>{
+ const isOn=music.toggle();
+ $("#sound").classList.toggle("off",!isOn);
+ $("#sound b").textContent=isOn?"on":"off";
+});
+
 /* ---------- la historia, antes de soltarle el control ---------- */
 const STORY=[
  {k:"Esta mañana",
@@ -725,6 +862,7 @@ storyScreen.addEventListener("pointerdown",()=>{
 /* ---------- arranque ---------- */
 $("#begin").addEventListener("click",()=>{
  hide(intro);
+ music.start();          // tiene que nacer de un gesto: iOS no arranca audio solo
  beat=0; showBeat();
 });
 setTimeout(()=>{$("#loading").style.opacity=0;setTimeout(()=>$("#loading").remove(),800)},700);
