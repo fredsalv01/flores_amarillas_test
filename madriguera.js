@@ -316,13 +316,13 @@ function makeApple(){                                 // manzana
 /* ---------- los recuerdos: objeto detrás, polaroid apoyada delante ---------- */
 const MEMORIES=[
  {u:.17,side:-1,lat:2.55,shape:makeSpool,photo:"assets/photos/foto1.jpeg",
-  text:"Lo primero que encontró fue esto. Y pensó que si algo merecía guardarse, era justo ese día."},
+  text:"La primera foto le recordo de un dia muy especial, donde ella disfrutaba de la compañia de su amado por primera vez. Y pensó que si un recuerdo merecía guardarse, era justo ese día."},
  {u:.38,side:1,lat:2.5,shape:makeStrawberries,photo:"assets/photos/foto2.jpeg",
-  text:"Hay risas que uno se lleva puestas mucho después. Esta es una de esas."},
+  text:"En todos los recuerdos, siempre tendre presente tu sonrisa y tu voz. Sobre todo las ocasiones donde no paramos de reir juntos, y nos sentimos libres de ser nosotros mismos."},
  {u:.62,side:-1,lat:2.5,shape:makeCheese,photo:"assets/photos/foto3.jpeg",
-  text:"Incluso cuando estuvimos lejos, esto seguía aquí abajo, esperándote intacto."},
+  text:"A veces estamos ocupados, pero siempre nos damos un tiempo para nosotros y disfrutamos de nuestra compañia. Y eso es lo que hace que nuestra relación sea tan especial."},
  {u:.83,side:1,lat:2.35,shape:makeApple,photo:"assets/photos/foto4.jpeg",
-  text:"Y todavía nos queda muchísimo por meter en esta madriguera."}
+  text:"Este es el último recuerdo, el más reciente. Aun asi, estoy seguro que habra muchos más recuerdos que construiremos juntos, y que siempre recordaremos con cariño."}
 ];
 const POL_Y=.72;                                      // la polaroid se apoya en el suelo, no sobre el objeto
 const polaroids=[];
@@ -666,8 +666,8 @@ function animate(){
  }
  if(!paused&&!finaleOn){
    const h=near>=0?"Toca para ver el recuerdo"
-     :behind()?"Te dejaste un recuerdo atrás — arrastra para mirar"
-     :"Toca el suelo para caminar";
+     :behind()?"Te dejaste un recuerdo atrás — manten presionado y arrastra la ratoncita para mirar"
+     :"Toca el suelo en una direccion para caminar";
    if(h!==lastHint){ lastHint=h; say(h) }
  }
  if(near>=0&&polaroids[near]&&!polaroids[near].seen)
