@@ -31,8 +31,7 @@ const tmp=new THREE.Vector3(),tmp2=new THREE.Vector3();
 /* ---------- la madriguera ----------
    Una curva, un tubo y un suelo plano. El tubo va centrado en y=0 y el suelo lo
    corta justo por la mitad: la mitad de abajo queda enterrada y arriba queda la
-   bóveda. Dos mallas para todo el pasillo, y el suelo plano es además el blanco
-   del raycast para caminar. */
+   bóveda. Dos mallas para todo el pasillo. */
 const PATH=new THREE.CatmullRomCurve3([
  [0,0,8],[0,0,1],[-4.5,0,-8],[-2,0,-18],[4,0,-26],[3,0,-36],[-3.5,0,-45],[-1,0,-55],[0,0,-62]
 ].map(a=>new THREE.Vector3(...a)));
@@ -139,21 +138,8 @@ const blob=new THREE.Mesh(
 blob.rotation.x=-Math.PI/2; blob.position.y=.02; scene.add(blob);
 
 /* ---------- moverse por el túnel ----------
-   La ratoncita no vive en (x,z) sino en (u a lo largo de la curva, lat a los
-   lados). Así nunca puede atravesar una pared por mucho que toques fuera: el
-   destino se convierte a ese espacio y se recorta, y no hace falta colisión. */
-const SEG=260,SAMP=[];
-for(let i=0;i<=SEG;i++){
- const u=i/SEG,p=PATH.getPointAt(u),tan=PATH.getTangentAt(u);
- SAMP.push({u,p,side:new THREE.Vector3().crossVectors(tan,UP).normalize()});
-}
-const LAT_MAX=R*.17;   // carril central: andar de lado no aporta nada y la metia dentro de los trastos
-function toPath(point){
- let best=SAMP[0],bd=Infinity;
- for(const s of SAMP){ const d=s.p.distanceToSquared(point); if(d<bd){bd=d;best=s} }
- const lat=THREE.MathUtils.clamp(tmp.subVectors(point,best.p).dot(best.side),-LAT_MAX,LAT_MAX);
- return {u:best.u,lat};
-}
+   La ratoncita no vive en (x,z) sino en u a lo largo de la curva. Asi no hay
+   colision que resolver: fuera de la curva no hay donde ir. */
 function placeAt(u,lat,out){
  const p=PATH.getPointAt(THREE.MathUtils.clamp(u,0,1));
  const tan=PATH.getTangentAt(THREE.MathUtils.clamp(u,0,1));
@@ -197,31 +183,14 @@ function stepWalker(st,grp,r,dt){
  r.ears[0].rotation.z=tw*.3; r.ears[1].rotation.z=-tw*.3;
 }
 
-function walkTo(u,lat){
- const d=Math.abs(u-walker.u)*LEN+Math.abs(lat-walker.lat);
- if(d<.25) return;
- walker.walking=true;
- gsap.killTweensOf(walker);
- gsap.to(walker,{u,lat,duration:Math.min(d/2.7,9),ease:"power1.inOut",onComplete:()=>{walker.walking=false}});
-}
 // tween que se puede esperar: asi el guion del final se lee de arriba abajo
 const tween=(o,v)=>new Promise(r=>gsap.to(o,{...v,onComplete:r}));
 
-// marca de destino: sin esto no sabes si el toque registró
-const ring=new THREE.Mesh(new THREE.RingGeometry(.28,.38,24),new THREE.MeshBasicMaterial({color:0xffc885,transparent:true,opacity:0,depthWrite:false}));
-ring.rotation.x=-Math.PI/2; scene.add(ring);
-function pingAt(p){
- ring.position.copy(p).setY(.03); ring.scale.setScalar(.6);
- gsap.killTweensOf([ring.scale,ring.material]);
- gsap.fromTo(ring.material,{opacity:.9},{opacity:0,duration:.75,ease:"power2.out"});
- gsap.to(ring.scale,{x:1.6,y:1.6,duration:.75,ease:"power2.out"});
-}
-
-// hasta el primer paso se le ensena donde tocar: una instruccion en 9px al pie
-// de la pantalla no la lee nadie, y un blanco que late se toca solo
+// hasta el primer paso, un anillo que se aleja por el suelo una y otra vez:
+// dice "por ahi" sin que haya que leer nada
 let taught=false;
 const guide=new THREE.Mesh(
- new THREE.RingGeometry(.45,.6,28),
+ new THREE.RingGeometry(.4,.52,28),
  new THREE.MeshBasicMaterial({color:0xffd79a,transparent:true,opacity:0,depthWrite:false})
 );
 guide.rotation.x=-Math.PI/2; scene.add(guide);
@@ -502,14 +471,17 @@ const dots=[...document.querySelectorAll("#progress i")];
 const show=el=>el.classList.add("show");
 const hide=el=>el.classList.remove("show","active");
 const say=txt=>{ if(txt) hint.textContent=txt; hint.classList.toggle("show",!!txt) };
-let seen=0,near=-1,focus=null,lastHint="";
+let seen=0,focus=null,lastHint="";
+const wv=new THREE.Vector3();
 const behind=()=>polaroids.some(m=>!m.seen&&m.u<walker.u-.005);
 
 function openMemory(i){
  const m=polaroids[i];
  if(m.seen) return;
  m.seen=true; paused=true; focus=m; say("");
- gsap.killTweensOf(walker); walker.walking=false;
+ gsap.killTweensOf(walker); walker.walking=false; holding=false;
+ m.pol.getWorldPosition(wv);
+ walker.faceYaw=yawTo(mouse.position,wv);   // se planta y se vuelve hacia la foto
  gsap.to(m.pol.position,{y:1.62,z:m.pz+.75,duration:.9,ease:"back.out(1.5)"});
  gsap.to(m.frameMat,{emissiveIntensity:.55,duration:.6});
  $("#memoryPhoto").src=m.photo;
@@ -523,7 +495,7 @@ $("#memory .memory-next").addEventListener("click",()=>{
  hide(memoryScreen);
  gsap.to(focus.pol.position,{y:POL_Y,z:focus.pz,duration:.7,ease:"power2.inOut"});
  gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});   // ya visto: deja de llamar
- focus=null; paused=false; music.duck(false);
+ focus=null; paused=false; music.duck(false); delete walker.faceYaw;
  say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
 });
 
@@ -589,40 +561,36 @@ $("#finalBtn").addEventListener("click",async()=>{
 $("#restartBtn").addEventListener("click",()=>location.reload());
 
 /* ---------- caminar y mirar ----------
-   Un toque manda a la ratoncita ahi. Un arrastre gira la camara a su
-   alrededor. Se distinguen por cuanto se movio el dedo: sin esto no se
-   puede volver sobre los pasos, porque solo se puede tocar lo que se ve. */
-const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
-const FLOOR=new THREE.Plane(new THREE.Vector3(0,1,0),0),hitV=new THREE.Vector3();
+   Mantener pulsado avanza hacia donde mira la camara; arrastrar gira la
+   camara; un toque corto da un paso. No hay nada que apuntar, asi que el
+   gesto no puede fallar. */
 const CAM_D=2.9;                     // radio al que orbita la camara
-let camA=0,camAim=0,camPrevU=walker.u,drag=null;
+const WALK=2.7;                      // unidades por segundo
+let camA=0,camAim=0,camPrevU=walker.u,drag=null,holding=false;
+const dirSign=()=>Math.cos(camA)>=0?1:-1;   // se anda hacia donde se mira
 
 addEventListener("pointerdown",e=>{
  if(paused||e.target!==canvas) return;
- drag={x:e.clientX,y:e.clientY,a:camA,moved:0};
+ drag={x:e.clientX,y:e.clientY,a:camA,moved:0,t:performance.now()};
 });
 addEventListener("pointermove",e=>{
  if(!drag) return;
  const dx=e.clientX-drag.x;
  drag.moved=Math.max(drag.moved,Math.abs(dx)+Math.abs(e.clientY-drag.y));
- camA=drag.a-dx*.007;
- camAim=camA;                        // mirar a mano manda sobre el encuadre automatico
+ if(drag.moved>18){ camA=drag.a-dx*.007; camAim=camA }   // ya es un giro, no un paso
 });
+addEventListener("pointercancel",()=>{ drag=null });
 addEventListener("pointerup",()=>{
  const d=drag; drag=null;
- if(!d||paused) return;
- if(d.moved>18) return;              // un pulgar nunca toca limpio: 10px se comia toques
- if(near>=0){ openMemory(near); return }
- ndc.set(d.x/innerWidth*2-1,-(d.y/innerHeight)*2+1);
- ray.setFromCamera(ndc,camera);
- // contra el plano infinito, no contra la malla del suelo: media pantalla es
- // boveda y pared, y ahi el toque no daba en nada y no pasaba absolutamente nada
- const hit=ray.ray.intersectPlane(FLOOR,hitV);
- const to=hit?toPath(hit):{u:walker.u+6/LEN,lat:walker.lat};   // al techo: que avance igual
- // y que un toque cerca del horizonte no la mande al otro extremo del tunel
- to.u=walker.u+THREE.MathUtils.clamp(to.u-walker.u,-14/LEN,14/LEN);
- pingAt(placeAt(to.u,to.lat,tmp2.clone()));
- walkTo(to.u,to.lat);
+ if(!d||paused||d.moved>18) return;
+ if(performance.now()-d.t<260){      // toque corto: un paso suelto
+   gsap.killTweensOf(walker);
+   walker.walking=true;
+   gsap.to(walker,{
+     u:THREE.MathUtils.clamp(walker.u+dirSign()*3/LEN,0,1),
+     duration:1.2,ease:"power1.inOut",onComplete:()=>{walker.walking=false}
+   });
+ }
  taught=true;
 });
 
@@ -668,31 +636,34 @@ function animate(){
  for(const l of lanterns) l.rotation.z=Math.sin(t*.62+l.userData.p)*.045;
  guide.visible=!taught&&!paused&&!finaleOn;
  if(guide.visible){
-   placeAt(walker.u+4.5/LEN,0,guide.position); guide.position.y=.04;
-   guide.material.opacity=.34+Math.sin(t*3.2)*.24;
-   guide.scale.setScalar(1+Math.sin(t*3.2)*.09);
+   const k=(t*.55)%1;                                  // sale, se aleja y vuelve a salir
+   placeAt(walker.u+dirSign()*(1.8+k*3.4)/LEN,0,guide.position); guide.position.y=.04;
+   guide.material.opacity=.5*Math.sin(k*Math.PI);
  }
 
- // ¿hay un recuerdo al alcance?
- let n=-1;
- for(let i=0;i<polaroids.length;i++){
-   const m=polaroids[i];
-   if(!m.seen&&Math.abs(walker.u-m.u)*LEN<2.6) n=i;
+ // mantener pulsado: camina mientras el dedo siga abajo y quieto
+ if(!finaleOn){
+   const want=!!drag&&drag.moved<=18&&performance.now()-drag.t>200&&!paused;
+   if(want&&!holding) gsap.killTweensOf(walker);   // el paso suelto cede ante el mantenido
+   holding=want;
+   if(holding){
+     walker.u=THREE.MathUtils.clamp(walker.u+dirSign()*WALK*dt/LEN,0,1);
+     walker.walking=true; taught=true;
+   }else if(!gsap.isTweening(walker)) walker.walking=false;
  }
- if(finaleOn) n=-1;
- if(n!==near&&!paused){
-   if(n>=0) gsap.to(polaroids[n].frameMat,{emissiveIntensity:.5,duration:.5});
-   near=n;
+
+ // anti fallo: al llegar al lado de un recuerdo se para sola y lo abre. Si hay
+ // que acertarle a algo para verlo, alguien no le va a acertar.
+ if(!paused&&!finaleOn) for(let i=0;i<polaroids.length;i++){
+   const m=polaroids[i];
+   if(!m.seen&&Math.abs(walker.u-m.u)*LEN<1.9){ openMemory(i); break }
  }
  if(!paused&&!finaleOn){
-   const h=near>=0?"Toca para ver el recuerdo"
-     :behind()?"Te dejaste un recuerdo atrás — manten presionado y arrastra la ratoncita para mirar"
-     :!taught?"Toca el círculo para caminar"
-     :"Toca para caminar · Arrastra para mirar";
+   const h=!taught?"Mantén pulsado para caminar"
+     :behind()?"Te dejaste un recuerdo atrás — arrastra para darte la vuelta"
+     :"Mantén pulsado para caminar · Arrastra para mirar";
    if(h!==lastHint){ lastHint=h; say(h) }
  }
- if(near>=0&&polaroids[near]&&!polaroids[near].seen)
-   polaroids[near].pol.position.y=POL_Y+Math.sin(t*2.4)*.035;   // late, para que se note que es tocable
 
  // cámara: detrás de ella sobre la propia curva, así nunca entra en una pared
  if(finalCam){
@@ -858,7 +829,7 @@ const STORY=[
   t:"«Hoy te tengo una sorpresa. Baja a nuestro refugio y camina hasta el fondo: te he dejado un par de sorpresas por el camino. Espero que te guste.»"},
  {k:"Así que bajé a buscarlo",
   t:"Agarré mi farolito y me metí en el túnel. Sabiendo que cuatro sorpresas me esperaban, estaba nerviosa y a la vez emocionada.",
-  c:"Toca para caminar · Arrastra para mirar"}
+  c:"Mantén pulsado para caminar · Arrastra para mirar"}
 ];
 const storyScreen=$("#story");
 let beat=0;
