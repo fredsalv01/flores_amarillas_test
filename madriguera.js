@@ -165,8 +165,10 @@ function stepWalker(st,grp,r,dt){
  if(st.faceYaw!==undefined)   // en el final se miran el uno al otro, no hacia donde andaban
    st.facing+=Math.atan2(Math.sin(st.faceYaw-st.facing),Math.cos(st.faceYaw-st.facing))*Math.min(1,dt*4);
  grp.rotation.y=st.facing;
- const w=st.walking?1:0;
- st.walkT+=dt*(st.walking?11:0);
+ // rampa en vez de corte seco: parar de golpe tambien se lee como un tiron
+ st.w=(st.w||0)+((st.walking?1:0)-(st.w||0))*Math.min(1,dt*9);
+ const w=st.w;
+ st.walkT+=dt*11*w;
  const swing=Math.sin(st.walkT)*w;
  r.legs[0].rotation.x=swing*.7; r.legs[1].rotation.x=-swing*.7;
  r.arms[0].rotation.x=-swing*.55+st.armLift; r.arms[1].rotation.x=swing*.55+st.armLift;
@@ -506,7 +508,7 @@ function openMemory(i){
  const m=polaroids[i];
  if(m.seen) return;
  m.seen=true; paused=true; focus=m; say("");
- gsap.killTweensOf(walker); walker.walking=false; holding=false;
+ gsap.killTweensOf(walker); walker.walking=false;
  m.pol.getWorldPosition(wv);
  walker.faceYaw=yawTo(mouse.position,wv);   // se planta y se vuelve hacia la foto
  gsap.to(m.beacon.scale,{x:0,y:0,z:0,duration:.6,ease:"back.in(2)",
@@ -589,36 +591,34 @@ $("#finalBtn").addEventListener("click",async()=>{
 $("#restartBtn").addEventListener("click",()=>location.reload());
 
 /* ---------- caminar y mirar ----------
-   Mantener pulsado avanza hacia donde mira la camara; arrastrar gira la
-   camara; un toque corto da un paso. No hay nada que apuntar, asi que el
-   gesto no puede fallar. */
+   Mantener pulsado avanza; arrastrar gira la camara; un toque corto da un
+   paso. El gesto se decide en los primeros 200ms y ya NO cambia: si el dedo
+   pudiera volver a "mirar" a mitad de camino, cualquier temblor -y un pulgar
+   tiembla siempre- la paraba en seco. Todo el andar pasa por un unico motor
+   continuo, sin tweens que matar. */
 const CAM_D=2.9;                     // radio al que orbita la camara
-const WALK=2.7;                      // unidades por segundo
-let camA=0,camAim=0,camPrevU=walker.u,drag=null,holding=false;
+const WALK=2.9;                      // unidades por segundo
+let camA=0,camAim=0,camPrevU=walker.u,drag=null,glide=0;
 const dirSign=()=>Math.cos(camA)>=0?1:-1;   // se anda hacia donde se mira
 
 addEventListener("pointerdown",e=>{
  if(paused||e.target!==canvas) return;
- drag={x:e.clientX,y:e.clientY,a:camA,moved:0,t:performance.now()};
+ glide=0;                            // la pulsacion manda sobre el paso suelto anterior
+ drag={x:e.clientX,y:e.clientY,a:camA,t:performance.now(),mode:"walk",dir:dirSign()};
 });
 addEventListener("pointermove",e=>{
  if(!drag) return;
  const dx=e.clientX-drag.x;
- drag.moved=Math.max(drag.moved,Math.abs(dx)+Math.abs(e.clientY-drag.y));
- if(drag.moved>18){ camA=drag.a-dx*.007; camAim=camA }   // ya es un giro, no un paso
+ if(drag.mode==="walk"&&performance.now()-drag.t<200
+    &&Math.abs(dx)+Math.abs(e.clientY-drag.y)>18) drag.mode="look";
+ if(drag.mode==="look"){ camA=drag.a-dx*.007; camAim=camA }
 });
 addEventListener("pointercancel",()=>{ drag=null });
 addEventListener("pointerup",()=>{
  const d=drag; drag=null;
- if(!d||paused||d.moved>18) return;
- if(performance.now()-d.t<260){      // toque corto: un paso suelto
-   gsap.killTweensOf(walker);
-   walker.walking=true;
-   gsap.to(walker,{
-     u:THREE.MathUtils.clamp(walker.u+dirSign()*3/LEN,0,1),
-     duration:1.2,ease:"power1.inOut",onComplete:()=>{walker.walking=false}
-   });
- }
+ if(!d||paused||d.mode==="look") return;
+ // un toque corto vale un paso entero, no lo poco que aguanto el dedo abajo
+ if(performance.now()-d.t<260) glide=d.dir*2.6;
  taught=true;
 });
 
@@ -676,22 +676,26 @@ function animate(){
    guide.material.opacity=.5*Math.sin(k*Math.PI);
  }
 
- // mantener pulsado: camina mientras el dedo siga abajo y quieto
- if(!finaleOn){
-   const want=!!drag&&drag.moved<=18&&performance.now()-drag.t>200&&!paused;
-   if(want&&!holding) gsap.killTweensOf(walker);   // el paso suelto cede ante el mantenido
-   holding=want;
-   if(holding){
-     walker.u=THREE.MathUtils.clamp(walker.u+dirSign()*WALK*dt/LEN,0,1);
+ // un unico motor: el dedo abajo empuja, y lo que queda de un toque suelto
+ // se consume por el mismo sitio. Sin zona muerta al empezar.
+ if(!finaleOn&&!paused){
+   let step=0;
+   if(drag&&drag.mode==="walk") step=drag.dir*WALK*dt;
+   else if(glide){
+     step=Math.sign(glide)*Math.min(Math.abs(glide),WALK*dt);
+     glide-=step;
+   }
+   if(step){
+     walker.u=THREE.MathUtils.clamp(walker.u+step/LEN,0,1);
      walker.walking=true; taught=true;
-   }else if(!gsap.isTweening(walker)) walker.walking=false;
+   }else walker.walking=false;
  }
 
  // anti fallo: al llegar al lado de un recuerdo se para sola y lo abre. Si hay
  // que acertarle a algo para verlo, alguien no le va a acertar.
  if(!paused&&!finaleOn) for(let i=0;i<polaroids.length;i++){
    const m=polaroids[i];
-   if(!m.seen&&Math.abs(walker.u-m.u)*LEN<1.9){ openMemory(i); break }
+   if(!m.seen&&Math.abs(walker.u-m.u)*LEN<1.9){ glide=0; openMemory(i); break }
  }
  if(!paused&&!finaleOn){
    const left=polaroids.length-seen,next=polaroids.find(m=>!m.seen);
