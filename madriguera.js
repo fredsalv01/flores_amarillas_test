@@ -832,12 +832,12 @@ $("#sound").addEventListener("click",()=>{
 /* ---------- la historia, antes de soltarle el control ---------- */
 const STORY=[
  {k:"Esta mañana",
-  t:"Se despertó y él no estaba. En su sitio había una nota doblada con demasiado cuidado, de esas que tardan más en doblarse que en escribirse."},
+  t:"Se desperté y mi ratoncito no estaba conmigo. En su lugar, había una nota doblada con demasiado cuidado, de esas que tardan más en doblarse que en escribirse."},
  {k:"La nota decía",
-  t:"«Hoy te tengo una sorpresa. Baja a la madriguera y camina hasta el fondo: te fui dejando cosas por el camino. Nuestras cosas.»"},
- {k:"Así que bajó a buscarlo",
-  t:"Cogió su farolito y se metió en el túnel. Cuatro recuerdos la esperaban en la oscuridad, y él al final de todos.",
-  c:"Toca el suelo para caminar · Arrastra para mirar"}
+  t:"«Hoy te tengo una sorpresa. Baja a nuestro refugio y camina hasta el fondo: te he dejado un par de sorpresas por el camino. Espero que te guste.»"},
+ {k:"Así que bajé a buscarlo",
+  t:"Agarré mi farolito y me metí en el túnel. Sabiendo que cuatro sorpresas me esperaban, estaba nerviosa y a la vez emocionada.",
+  c:"Toca el suelo en una direccion para caminar · Manten presionado y arrastra el ratoncito para mirar alrededor"}
 ];
 const storyScreen=$("#story");
 let beat=0;
