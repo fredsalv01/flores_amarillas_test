@@ -621,3 +621,11 @@ body.dawn .progress i {
   opacity: 0.45;
   margin: -4px 0 20px;
 }
+
+/* madriguera: la pista es la unica instruccion del juego, que se lea */
+#hint {
+  font-size: 10px;
+}
+#hint.show {
+  opacity: 0.6;
+}
