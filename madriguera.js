@@ -8,7 +8,7 @@ const renderer=new THREE.WebGLRenderer({canvas,antialias:!MOBILE,powerPreference
 renderer.setPixelRatio(Math.min(devicePixelRatio,MOBILE?1.5:1.75));
 renderer.setSize(innerWidth,innerHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.18;
+renderer.toneMappingExposure=1.3;
 // ponytail: sin shadowMap. Dentro de un túnel no se leen, y la mancha bajo la
 // ratoncita da el contacto con el suelo por 1 draw call en vez de un pase entero.
 
@@ -17,8 +17,8 @@ gsap.globalTimeline.timeScale(SPEED);
 const wait=ms=>new Promise(r=>setTimeout(r,ms/SPEED));
 
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x120b08);
-scene.fog=new THREE.FogExp2(0x1c110b,.042);   // la niebla cálida es lo que hace que el túnel no sea una cueva
+scene.background=new THREE.Color(0x1a100a);
+scene.fog=new THREE.FogExp2(0x271811,.036);   // la niebla cálida es lo que hace que el túnel no sea una cueva
 const camera=new THREE.PerspectiveCamera(46,innerWidth/innerHeight,.1,140);
 const clock=new THREE.Clock();
 let t=0;
@@ -40,13 +40,13 @@ const R=4.2;   // más ancho: ahora entran objetos de 2.5 contra 1.6 de ratoncit
 
 const tunnel=new THREE.Mesh(
  new THREE.TubeGeometry(PATH,MOBILE?110:190,R,MOBILE?10:14,false),
- new THREE.MeshStandardMaterial({color:0x6f4a31,roughness:1,side:THREE.BackSide,flatShading:true})
+ new THREE.MeshStandardMaterial({color:0x7b5539,roughness:1,side:THREE.BackSide,flatShading:true})
 );
 scene.add(tunnel);
 
 const floor=new THREE.Mesh(
  new THREE.PlaneGeometry(90,170),
- new THREE.MeshStandardMaterial({color:0x4b3524,roughness:1})
+ new THREE.MeshStandardMaterial({color:0x5a4029,roughness:1})
 );
 floor.rotation.x=-Math.PI/2; floor.position.set(0,0,-27); scene.add(floor);
 
@@ -67,9 +67,9 @@ for(let i=0;i<roots.count;i++){
 scene.add(roots);
 
 /* ---------- luz ---------- */
-scene.add(new THREE.HemisphereLight(0xffd9a8,0x2a1a10,.35));
+scene.add(new THREE.HemisphereLight(0xffd9a8,0x2a1a10,.55));
 // farol que va con ella: dentro de un túnel, si la protagonista no se ve, no hay historia
-const lamp=new THREE.PointLight(0xffc885,2.6,14,1.6); scene.add(lamp);
+const lamp=new THREE.PointLight(0xffc885,3.1,16,1.5); scene.add(lamp);
 const endGlow=new THREE.PointLight(0xffd85e,3.4,26,1.4);   // el amarillo del final, asomando
 endGlow.position.copy(PATH.getPointAt(1)).setY(1.6); scene.add(endGlow);
 
@@ -199,7 +199,7 @@ guide.rotation.x=-Math.PI/2; scene.add(guide);
 
 /* ---------- farolitos colgados de la bóveda ---------- */
 const lanterns=[];
-function makeLantern(u,lat,power=2.1){
+function makeLantern(u,lat,power=2.5){
  const g=new THREE.Group();
  placeAt(u,lat,g.position);
  const top=Math.sqrt(Math.max(R*R-lat*lat,1))-.06;   // el punto de la bóveda justo encima
@@ -212,7 +212,7 @@ function makeLantern(u,lat,power=2.1){
  const glass=new THREE.Mesh(new THREE.SphereGeometry(.2,12,10),new THREE.MeshBasicMaterial({color:0xffd79a}));
  glass.position.y=-drop-.28; g.add(glass);
  const foot=new THREE.Mesh(new THREE.CylinderGeometry(.09,.14,.12,8),dark); foot.position.y=-drop-.5; g.add(foot);
- const light=new THREE.PointLight(0xffb974,power,13,1.5);
+ const light=new THREE.PointLight(0xffb974,power,15,1.4);
  light.position.y=-drop-.28; g.add(light);
  g.userData.p=Math.random()*7;                       // cada uno se mece a su ritmo
  scene.add(g); lanterns.push(g);
@@ -360,7 +360,7 @@ MEMORIES.forEach(m=>{
  photo.position.set(0,.14,.025); pol.add(photo);
 
  scene.add(g);
- makeLantern(m.u,m.side*1.15,2.4);                     // cada recuerdo tiene su farol encima
+ makeLantern(m.u,m.side*1.15,2.9);                     // cada recuerdo tiene su farol encima
  const beacon=makeBeacon();
  // justo encima del objeto, pero por debajo de la boveda a esa distancia del eje
  const by=Math.min(box.max.y+.7,Math.sqrt(R*R-m.lat*m.lat)-.55);
@@ -368,7 +368,7 @@ MEMORIES.forEach(m=>{
  scene.add(beacon);
  polaroids.push({...m,g,pol,frameMat,pz,beacon,by,seen:false});
 });
-for(const u of (MOBILE?[.5]:[.08,.5,.92])) makeLantern(u,(Math.random()-.5)*1.4,1.7);
+for(const u of (MOBILE?[.5]:[.08,.5,.92])) makeLantern(u,(Math.random()-.5)*1.4,2.1);
 
 /* ---------- la sala del final ----------
    Una esfera a BackSide cortada por el mismo suelo plano, igual que el túnel.
