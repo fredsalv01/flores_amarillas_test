@@ -291,6 +291,29 @@ function makeApple(){                                 // manzana
  return g;
 }
 
+/* ---------- baliza sobre cada recuerdo ----------
+   En un tunel oscuro, un bulto marron a veinte metros no es un motivo para
+   acercarse. Va sin niebla a proposito: es senalizacion, tiene que leerse
+   desde lejos, y se apaga al abrir el recuerdo para que el propio tunel diga
+   lo que queda. Sprite en vez de plano: encara la camara el solo. */
+const GLOW=radialTex("rgba(255,216,150,.95)","rgba(255,170,70,0)");
+GLOW.colorSpace=THREE.SRGBColorSpace;
+function makeBeacon(){
+ const g=new THREE.Group();
+ const halo=new THREE.Sprite(new THREE.SpriteMaterial({
+   map:GLOW,transparent:true,opacity:.8,depthWrite:false,
+   blending:THREE.AdditiveBlending,fog:false
+ }));
+ halo.scale.setScalar(2.4); g.add(halo);
+ const gem=new THREE.Mesh(
+   new THREE.OctahedronGeometry(.18),
+   new THREE.MeshBasicMaterial({color:0xfff3d2,fog:false})
+ );
+ g.add(gem);
+ g.userData={halo,gem};
+ return g;
+}
+
 /* ---------- los recuerdos: objeto detrás, polaroid apoyada delante ---------- */
 const MEMORIES=[
  {u:.17,side:-1,lat:2.55,shape:makeSpool,photo:"assets/photos/foto1.jpeg",
@@ -336,7 +359,12 @@ MEMORIES.forEach(m=>{
 
  scene.add(g);
  makeLantern(m.u,m.side*1.15,2.4);                     // cada recuerdo tiene su farol encima
- polaroids.push({...m,g,pol,frameMat,pz,seen:false});
+ const beacon=makeBeacon();
+ // justo encima del objeto, pero por debajo de la boveda a esa distancia del eje
+ const by=Math.min(box.max.y+.7,Math.sqrt(R*R-m.lat*m.lat)-.55);
+ beacon.position.copy(g.position).setY(by);
+ scene.add(beacon);
+ polaroids.push({...m,g,pol,frameMat,pz,beacon,by,seen:false});
 });
 for(const u of (MOBILE?[.5]:[.08,.5,.92])) makeLantern(u,(Math.random()-.5)*1.4,1.7);
 
@@ -473,7 +501,6 @@ const hide=el=>el.classList.remove("show","active");
 const say=txt=>{ if(txt) hint.textContent=txt; hint.classList.toggle("show",!!txt) };
 let seen=0,focus=null,lastHint="";
 const wv=new THREE.Vector3();
-const behind=()=>polaroids.some(m=>!m.seen&&m.u<walker.u-.005);
 
 function openMemory(i){
  const m=polaroids[i];
@@ -482,6 +509,8 @@ function openMemory(i){
  gsap.killTweensOf(walker); walker.walking=false; holding=false;
  m.pol.getWorldPosition(wv);
  walker.faceYaw=yawTo(mouse.position,wv);   // se planta y se vuelve hacia la foto
+ gsap.to(m.beacon.scale,{x:0,y:0,z:0,duration:.6,ease:"back.in(2)",
+   onComplete:()=>{m.beacon.visible=false}});          // apagada: ya no hay que venir aqui
  gsap.to(m.pol.position,{y:1.62,z:m.pz+.75,duration:.9,ease:"back.out(1.5)"});
  gsap.to(m.frameMat,{emissiveIntensity:.55,duration:.6});
  $("#memoryPhoto").src=m.photo;
@@ -496,7 +525,6 @@ $("#memory .memory-next").addEventListener("click",()=>{
  gsap.to(focus.pol.position,{y:POL_Y,z:focus.pz,duration:.7,ease:"power2.inOut"});
  gsap.to(focus.frameMat,{emissiveIntensity:0,duration:.6});   // ya visto: deja de llamar
  focus=null; paused=false; music.duck(false); delete walker.faceYaw;
- say(seen<polaroids.length?"Sigue caminando":"Al fondo hay algo amarillo...");
 });
 
 /* ---------- el final: a partir de aqui manda la historia, no el usuario ---------- */
@@ -634,6 +662,13 @@ function animate(){
  // no se remata la historia con recuerdos sin abrir: se avisa y se espera
  if(!finaleOn&&walker.u>.9&&seen>=polaroids.length) finale();
  for(const l of lanterns) l.rotation.z=Math.sin(t*.62+l.userData.p)*.045;
+ for(const m of polaroids){
+   if(!m.beacon.visible) continue;
+   const ph=m.u*9;
+   m.beacon.position.y=m.by+Math.sin(t*1.5+ph)*.13;
+   m.beacon.userData.gem.rotation.set(Math.sin(t*.7+ph)*.35,t*1.1,0);
+   m.beacon.userData.halo.material.opacity=.55+Math.sin(t*2.1+ph)*.25;
+ }
  guide.visible=!taught&&!paused&&!finaleOn;
  if(guide.visible){
    const k=(t*.55)%1;                                  // sale, se aleja y vuelve a salir
@@ -659,9 +694,11 @@ function animate(){
    if(!m.seen&&Math.abs(walker.u-m.u)*LEN<1.9){ openMemory(i); break }
  }
  if(!paused&&!finaleOn){
+   const left=polaroids.length-seen,next=polaroids.find(m=>!m.seen);
    const h=!taught?"Mantén pulsado para caminar"
-     :behind()?"Te dejaste un recuerdo atrás — arrastra para darte la vuelta"
-     :"Mantén pulsado para caminar · Arrastra para mirar";
+     :!left?"Ya los encontraste todos · al fondo hay algo amarillo"
+     :next.u<walker.u-.005?`Quedan ${left} · uno se quedó atrás, arrastra para darte la vuelta`
+     :`Quedan ${left} · sigue el túnel y busca la luz`;
    if(h!==lastHint){ lastHint=h; say(h) }
  }
 
