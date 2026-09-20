@@ -325,7 +325,7 @@ const MEMORIES=[
  {u:.62,side:-1,lat:2.5,shape:makeCheese,photo:"assets/photos/foto3.jpeg",
   text:"Me gusta lo linda que siempre te ves con vestidos, admiro lo linda, elegante e inteligente que eres. Deseo que siempre podamos compartir momentos juntos, y que siempre nos sintamos felices de estar el uno con el otro."},
  {u:.83,side:1,lat:2.35,shape:makeApple,photo:"assets/photos/foto4.jpeg",
-  text:"Este es el último recuerdo, el más reciente. Aun asi, estoy seguro que habra muchos más recuerdos que construiremos juntos, y que siempre recordaremos con cariño."}
+  text:"Este es el último recuerdo, el más reciente. Aún asi, estoy seguro que habra muchos más recuerdos que construiremos juntos, y que siempre recordaremos con cariño."}
 ];
 const POL_Y=.72;                                      // la polaroid se apoya en el suelo, no sobre el objeto
 const polaroids=[];
