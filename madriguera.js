@@ -323,7 +323,7 @@ const MEMORIES=[
  {u:.38,side:1,lat:2.5,shape:makeStrawberries,photo:"assets/photos/foto2.jpeg",
   text:"En todos los recuerdos, siempre tendre presente tu sonrisa y tu voz. Sobre todo las ocasiones donde no paramos de reir juntos, y nos sentimos libres de ser nosotros mismos."},
  {u:.62,side:-1,lat:2.5,shape:makeCheese,photo:"assets/photos/foto3.jpeg",
-  text:"A veces estamos ocupados, pero siempre nos damos un tiempo para nosotros y disfrutamos de nuestra compañia. Y eso es lo que hace que nuestra relación sea tan especial."},
+  text:"Me gusta lo linda que siempre te ves con vestidos, admiro lo linda, elegante e inteligente que eres. Deseo que siempre podamos compartir momentos juntos, y que siempre nos sintamos felices de estar el uno con el otro."},
  {u:.83,side:1,lat:2.35,shape:makeApple,photo:"assets/photos/foto4.jpeg",
   text:"Este es el último recuerdo, el más reciente. Aun asi, estoy seguro que habra muchos más recuerdos que construiremos juntos, y que siempre recordaremos con cariño."}
 ];
@@ -865,7 +865,7 @@ $("#sound").addEventListener("click",()=>{
 /* ---------- la historia, antes de soltarle el control ---------- */
 const STORY=[
  {k:"Esta mañana",
-  t:"Se desperté y mi ratoncito no estaba conmigo. En su lugar, había una nota doblada con demasiado cuidado, de esas que tardan más en doblarse que en escribirse."},
+  t:"Me desperté y mi ratoncito no estaba conmigo. En su lugar, había una nota doblada con demasiado cuidado, de esas que tardan más en doblarse que en escribirse."},
  {k:"La nota decía",
   t:"«Hoy te tengo una sorpresa. Baja a nuestro refugio y camina hasta el fondo: te he dejado un par de sorpresas por el camino. Espero que te guste.»"},
  {k:"Así que bajé a buscarlo",

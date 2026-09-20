@@ -21,6 +21,13 @@ body {
 }
 body {
   touch-action: manipulation;
+  /* mantener pulsado es caminar. Sin esto, el movil entiende la pulsacion
+     larga como "selecciona texto" y saca el menu de Copiar/Traducir encima
+     de la historia. Va en body para que lo herede toda la pagina. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 #scene {
   position: fixed;
